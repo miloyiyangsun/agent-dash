@@ -27,8 +27,6 @@
   .seg button { border: 0; background: none; color: var(--muted); padding: 5px 12px; border-radius: 5px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .seg button:hover:not(.on) { color: var(--ink); background: var(--bg); }
   .seg button.on { background: var(--ink); color: var(--bg); }
-  #qualSeg { border-color: transparent; background: transparent; }
-  #qualSeg button.on { background: var(--line); color: var(--ink); }
   .seg button small { opacity: .65; font-size: 11px; }
   label.tog { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none; }
   .btn { border: 1px solid var(--line); background: var(--panel); color: var(--muted); padding: 5px 11px; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
@@ -156,7 +154,6 @@
   body.full h1 { font-size: 15px; white-space: nowrap; }
   body.full .summary { margin-left: 0; flex-wrap: nowrap; }
   body.full .controls { width: auto; flex: 1; min-width: 0; padding: 0; border: 0; flex-wrap: wrap; row-gap: 6px; }
-  body.full #viewSeg, body.full .newver { display: none; }
   /* The panel floats over a full-width office; the office pans its view to keep
      the room clear of it (setInset), so the canvas never resizes during the slide. */
   body.full #officeWrap { position: relative; flex: 1; min-height: 0; }
@@ -236,7 +233,6 @@
   @media (max-width: 640px) {
     html body.full header { padding: 8px 10px; gap: 6px; flex-wrap: nowrap; }
     html body.full .controls { flex-wrap: nowrap; gap: 6px; }
-    body.full #pipBtn { display: none !important; }
     body.full details.menu > summary { gap: 0; padding-inline: 9px; }
     body.full #sceneMenu > summary { gap: 6px; }
     body.full #sceneName { max-width: 6.5em; }
@@ -344,67 +340,86 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>👀 <span data-t="title"></span></h1>
-    <div class="summary" id="summary"></div>
-    <button class="newver" id="newVer" hidden></button>
-    <div class="controls">
-      <div class="seg" id="viewSeg">
-        <button data-v="office">办公室</button>
-        <button data-v="topo">拓扑</button>
-        <button data-v="list">列表</button>
+  <header id="topbar">
+    <div class="tb-left">
+      <span class="brand-seal" aria-hidden="true"></span>
+      <span class="brand" data-t="brand"></span>
+      <svg class="heartbeat" id="heartbeat" viewBox="0 0 72 18" width="72" height="18" aria-hidden="true"><polyline id="hbLine" points=""></polyline></svg>
+      <div class="tb-counts" id="tbCounts">
+        <button type="button" class="tb-count" data-wb-filter="needsYou"><span class="ui-dot st-waiting"></span><span data-t="needsYou"></span> <b class="ui-num" id="cntNeeds">0</b></button>
+        <span class="tb-dot-sep" aria-hidden="true">·</span>
+        <button type="button" class="tb-count" data-wb-filter="working"><span class="ui-dot st-tool"></span><span data-t="working"></span> <b class="ui-num" id="cntWorking">0</b></button>
+        <span class="tb-dot-sep" aria-hidden="true">·</span>
+        <button type="button" class="tb-count" data-wb-filter="finished"><span class="ui-dot st-done"></span><span data-t="finished"></span> <b class="ui-num" id="cntFinished">0</b></button>
       </div>
-      <div class="seg" id="qualSeg">
-        <button data-v="mid" data-t="qMid"></button>
-        <button data-v="high" data-t="qHigh"></button>
+    </div>
+    <div class="tb-center">
+      <div class="ui-seg view-seg" id="viewSeg" role="group">
+        <span class="seg-thumb" id="segThumb" aria-hidden="true"></span>
+        <button type="button" data-v="workbench" data-t="viewWorkbench"></button>
+        <button type="button" data-v="timeline" data-t="viewTimeline"></button>
+        <button type="button" data-v="office" data-t="viewOffice"></button>
       </div>
-      <details class="settings menu" id="sceneMenu">
-        <summary class="btn" aria-controls="scenePanel" data-a="scene"><span class="scene-ico" id="sceneIco"></span><span id="sceneName"></span></summary>
-        <div class="settings-panel list-panel scene-panel" id="scenePanel">
-          <div class="setting-label" data-t="scene"></div>
-          <div class="pick-list scene-list" id="sceneSeg" role="group"></div>
-        </div>
-      </details>
-      <span class="toolbar-space" aria-hidden="true"></span>
-      <button class="btn" id="pipBtn" hidden></button>
-      <details class="settings menu" id="todayMenu">
-        <summary class="btn" aria-controls="todayPanel" data-a="today"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.2" height="7" rx="1"/><rect x="10.4" y="6" width="3.2" height="12" rx="1"/><rect x="15.8" y="13.5" width="3.2" height="4.5" rx="1"/></svg><span data-t="today"></span> <span class="today-tokens ui-num" id="todayTokens"></span></summary>
-        <div class="settings-panel today-panel" id="todayPanel"></div>
-      </details>
-      <details class="settings menu" id="agentMenu">
-        <summary class="btn" aria-controls="agentPanel" data-a="agents"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16l-6 7.2v5.3l-4 1.5v-6.8z"/></svg><span id="agentName"></span></summary>
-        <div class="settings-panel list-panel" id="agentPanel">
-          <div class="setting-label" data-t="agents"></div>
-          <div class="pick-list" id="agentChips" role="group"></div>
-        </div>
-      </details>
-      <details class="settings menu" id="langMenu">
-        <summary class="btn" aria-controls="langPanel" data-a="language"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.8"/><path d="M3.4 12h17.2M12 3.2c2.6 2.6 3.7 5.6 3.7 8.8s-1.1 6.2-3.7 8.8M12 3.2C9.4 5.8 8.3 8.8 8.3 12s1.1 6.2 3.7 8.8"/></svg><span id="langName"></span></summary>
-        <div class="settings-panel list-panel" id="langPanel">
-          <div class="setting-label" data-t="language"></div>
-          <div class="pick-list" id="langList" role="listbox"></div>
-        </div>
-      </details>
+    </div>
+    <div class="tb-right">
+      <label class="tb-search">
+        <svg class="ui-ico tb-search-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        <input class="ui-input" id="wbSearch" type="search" autocomplete="off" spellcheck="false">
+        <span class="ui-kbd tb-kbd">Ctrl K</span>
+      </label>
       <details class="settings menu" id="settingsMenu">
-        <summary class="btn" aria-controls="settingsPanel" data-a="settings"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.6h-4l-.4 2.4A7.5 7.5 0 0 0 7.1 6.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h4l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/></svg><span data-t="settings"></span></summary>
+        <summary class="ui-btn tb-settings" aria-controls="settingsPanel" data-a="settings"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.6h-4l-.4 2.4A7.5 7.5 0 0 0 7.1 6.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h4l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/></svg></summary>
         <div class="settings-panel prefs-panel" id="settingsPanel">
           <div class="setting-group">
-            <span class="setting-label" data-t="theme"></span>
+            <span class="setting-label" data-t="groupDisplay"></span>
+            <div class="setting-row"><span class="setting-sub" data-t="theme"></span></div>
             <div class="ui-seg" id="themeSeg" role="group" data-a="theme">
               <button data-theme-v="auto" data-t="themeAuto"></button>
               <button data-theme-v="dark" data-t="themeDark"></button>
               <button data-theme-v="light" data-t="themeLight"></button>
             </div>
+            <div class="setting-row"><label class="setting-sub" for="langSelect" data-t="language"></label></div>
+            <select class="ui-input" id="langSelect"></select>
+            <div class="setting-row"><label class="setting-sub" for="qualitySelect" data-t="qualityL"></label></div>
+            <select class="ui-input" id="qualitySelect">
+              <option value="mid" data-t="qMid"></option>
+              <option value="high" data-t="qHigh"></option>
+            </select>
+            <div class="setting-row"><label class="setting-sub" for="legacyView" data-t="legacyViewsL"></label></div>
+            <select class="ui-input" id="legacyView">
+              <option value="" data-t="legacyNone"></option>
+              <option value="topo" data-t="topo"></option>
+              <option value="list" data-t="list"></option>
+            </select>
+            <div class="setting-toggles">
+              <label class="tog" id="agentBadgeToggle"><span data-t="showAgent"></span><input type="checkbox" role="switch" id="showAgent"></label>
+            </div>
+            <button class="ui-btn setting-wide" id="pipBtn" hidden></button>
           </div>
           <div class="setting-group">
+            <span class="setting-label" data-t="groupData"></span>
+            <div class="setting-row"><span class="setting-sub" data-t="agents"></span><span class="setting-value" id="agentName"></span></div>
+            <div class="pick-list" id="agentChips" role="group"></div>
             <div class="setting-toggles">
               <label class="tog"><span data-t="subagents"></span><input type="checkbox" role="switch" id="showSub"></label>
               <label class="tog" id="idleToggle"><span data-t="showIdle"></span><input type="checkbox" role="switch" id="showIdle"></label>
-              <label class="tog" id="agentBadgeToggle"><span data-t="showAgent"></span><input type="checkbox" role="switch" id="showAgent"></label>
+            </div>
+            <div class="setting-row"><span class="setting-sub" data-t="today"></span><span class="ui-num setting-value" id="todayTokens"></span></div>
+            <div id="todayPanel"></div>
+          </div>
+          <div class="setting-group">
+            <span class="setting-label" data-t="groupSoundNotify"></span>
+            <div class="setting-toggles">
               <label class="tog" id="soundToggle"><span data-t="sound"></span><input type="checkbox" role="switch" id="sound"></label>
               <label class="tog" id="notifyToggle"><span data-t="notify"></span><input type="checkbox" role="switch" id="notify"></label>
             </div>
             <p class="tog-note" id="notifyNote" data-t="notifyBlocked" hidden></p>
+          </div>
+          <div class="setting-group">
+            <span class="setting-label" data-t="groupAbout"></span>
+            <div class="setting-row"><span class="setting-sub" data-t="versionL"></span><span class="setting-value ui-num" id="aboutVer"></span></div>
+            <button class="newver" id="newVer" hidden></button>
+            <p class="tog-note" data-t="aboutNote"></p>
           </div>
         </div>
       </details>
@@ -418,6 +433,19 @@
     <button class="btn" id="closePreview" data-t="pipStop"></button>
   </div>
   <div id="officeWrap">
+    <div class="office-tools">
+      <div class="ui-seg" id="qualSeg" role="group">
+        <button type="button" data-v="mid" data-t="qMid"></button>
+        <button type="button" data-v="high" data-t="qHigh"></button>
+      </div>
+      <details class="settings menu" id="sceneMenu">
+        <summary class="ui-btn" aria-controls="scenePanel" data-a="scene"><span class="scene-ico" id="sceneIco"></span><span id="sceneName"></span></summary>
+        <div class="settings-panel list-panel scene-panel" id="scenePanel">
+          <div class="setting-label" data-t="scene"></div>
+          <div class="pick-list scene-list" id="sceneSeg" role="group"></div>
+        </div>
+      </details>
+    </div>
     <div class="office loading" id="office"><div class="office-loader"><div class="spin"></div><span id="loaderText"></span></div></div>
     <div class="legend" id="legend"></div>
     <div class="legend" id="agentLegend" hidden></div>
@@ -438,6 +466,25 @@
     </div>
   </aside>
   <button class="side-tab" id="sideTab"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5L3 12l6.5 6.5M21 12H4"/></svg><span id="sideTabCount"></span></button>
+  <div id="wb" hidden>
+    <button class="wb-drawer-tab" id="wbLeftTab" type="button"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h10"/></svg><span data-t="wbTasks"></span></button>
+    <section class="wb-left" id="wbLeft">
+      <div class="wb-left-head">
+        <h2 data-t="wbTasks"></h2><span class="ui-num" id="wbCount">0</span>
+        <button class="wb-drawer-close" id="wbLeftClose" type="button" data-a="wbClose"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="wb-list" id="wbList"></div>
+    </section>
+    <section class="wb-mid" id="wbMid"><div class="wb-mid-inner" id="wbDetail"></div></section>
+    <aside class="wb-right" id="wbRight">
+      <div class="wb-right-head"><h2 data-t="wbProperties"></h2>
+        <button class="icon-btn" id="wbRightHide" type="button" data-a="wbCollapse"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg></button>
+      </div>
+      <div class="wb-right-body"><p class="wb-placeholder" data-t="wbPropsPlaceholder"></p></div>
+    </aside>
+    <button class="wb-right-tab" id="wbRightShow" type="button"><span data-t="wbProperties"></span></button>
+  </div>
+  <div id="tl" hidden><div class="wb-empty" data-t="timelineWip"></div></div>
   <main id="main"></main>
 </div>
 <div id="lightbox"><img alt=""><span class="cap"></span></div>
@@ -471,8 +518,14 @@ function applyLang(code) {
   L = I18N[code];
   document.documentElement.lang = L.html;
   rtf = new Intl.RelativeTimeFormat(L.html, { numeric: 'auto', style: 'short' });
-  document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = L[el.dataset.t]));
-  document.querySelectorAll('[data-a]').forEach((el) => { el.setAttribute('aria-label', L[el.dataset.a]); el.title = L[el.dataset.a]; });
+  // New keys fall back to English until every translation catches up.
+  const t = (k) => L[k] ?? I18N.en[k] ?? k;
+  document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t)));
+  document.querySelectorAll('[data-a]').forEach((el) => { const v = t(el.dataset.a); el.setAttribute('aria-label', v); el.title = v; });
+  const searchEl = document.getElementById('wbSearch');
+  if (searchEl) searchEl.placeholder = t('searchPlaceholder');
+  if (typeof syncViewSeg === 'function') syncViewSeg();
+  requestAnimationFrame(syncTopbar);
   const legend = document.getElementById('legend');
   if (legend) legend.innerHTML = ['thinking', 'tool', 'typing', 'waiting', 'done', 'error', 'interrupted', 'idle']
     .map((k) => `<span data-s="${k}"><span class="dot" style="color:var(--s)"></span>${L[k]}</span>`).join('');
@@ -481,6 +534,7 @@ function applyLang(code) {
   if (typeof syncControls === 'function') syncControls();
   if (typeof renderSceneSel === 'function') renderSceneSel();
   if (typeof renderVersion === 'function') renderVersion();
+  window.Workbench?.onLang?.();
 }
 
 const store = (() => {
@@ -490,14 +544,14 @@ const store = (() => {
   return { get, set };
 })();
 
-const PREF_DEFAULTS = { view: 'office', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, side: true, lang: 'auto', theme: 'auto' };
+const PREF_DEFAULTS = { view: 'workbench', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, side: true, lang: 'auto', theme: 'auto' };
 function validAgentId(v) {
   return typeof v === 'string' && v !== 'all' && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(v) && !Object.hasOwn(Object.prototype, v);
 }
 function validPreference(k, v) {
   if (!Object.hasOwn(PREF_DEFAULTS, k)) return false;
   if (typeof PREF_DEFAULTS[k] === 'boolean') return typeof v === 'boolean';
-  if (k === 'view') return ['office', 'topo', 'list'].includes(v);
+  if (k === 'view') return ['workbench', 'timeline', 'office', 'topo', 'list'].includes(v);
   if (k === 'quality') return ['mid', 'high'].includes(v);
   if (k === 'theme') return ['auto', 'dark', 'light'].includes(v);
   // Which agents to show; none selected means all of them.
@@ -511,6 +565,9 @@ function validPreference(k, v) {
   if (validAgentId(old) && !store.get('agents', []).length) store.set('agents', [old]);
   if (old !== 'all') store.set('agent', 'all');
 }
+// The redesign opens on the workbench once; afterwards the last view sticks.
+// (A ?view= URL parameter is applied later and still wins.)
+if (store.get('viewV', 0) !== 2) { store.set('view', 'workbench'); store.set('viewV', 2); }
 function readPreferences() {
   return Object.fromEntries(Object.entries(PREF_DEFAULTS).map(([k, d]) => {
     const v = store.get(k, d);
@@ -583,6 +640,10 @@ const state = {
   prev: new Map(),
   prevStuck: new Set(),
   flash: new Set(),
+  // Workbench state is shared with the top bar and public/ui/workbench.js.
+  wbSel: null,
+  wbFilter: 'all',
+  wbQuery: '',
 };
 applyTheme();
 let popout = null;
@@ -595,6 +656,36 @@ const GROUPS = [
   { key: 'finished', match: (s) => s === 'done' || s === 'interrupted' },
   { key: 'idle', match: (s) => s === 'idle' },
 ];
+
+// Top-bar heartbeat: active sessions sampled every 10 s, 60 samples = 10 min.
+const HB_LEN = 60;
+const hbPoints = [];
+let hbReady = false;
+function drawHeartbeat() {
+  const line = document.getElementById('hbLine');
+  if (!line) return;
+  const max = Math.max(1, ...hbPoints);
+  const min = Math.min(...hbPoints);
+  const span = max - min;
+  line.setAttribute('points', hbPoints.map((v, i) => {
+    const x = (i * 72) / (HB_LEN - 1);
+    const y = span ? 16 - ((v - min) / span) * 13 : 9;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' '));
+}
+function sampleHeartbeat() {
+  if (!state.loaded) return;
+  const n = state.data.sessions.filter((s) => ACTIVE.has(s.status)).length;
+  if (!hbReady) {
+    for (let i = 0; i < HB_LEN; i++) hbPoints.push(n);
+    hbReady = true;
+  } else {
+    hbPoints.push(n);
+    if (hbPoints.length > HB_LEN) hbPoints.shift();
+  }
+  drawHeartbeat();
+}
+setInterval(sampleHeartbeat, 10000);
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -724,26 +815,31 @@ function render() {
 
   const count = (f) => all.filter((s) => f(s.status)).length;
   const hasError = all.some((s) => s.status === 'error');
-  document.getElementById('summary').innerHTML = GROUPS.slice(0, 3).map((g) => {
-    const n = count(g.match);
-    const color = g.key === 'needsYou'
-      ? (hasError ? 'var(--st-error)' : 'var(--st-waiting)')
-      : g.key === 'working' ? 'var(--st-tool)' : 'var(--st-done)';
-    return `<span class="chip"><span class="dot" style="color:${color}"></span>${L[g.key]} <b class="ui-num">${n}</b></span>`;
-  }).join('');
+  const needs = count(GROUPS[0].match);
+  const working = count((s) => ACTIVE.has(s));
+  const finished = count(GROUPS[2].match);
+  const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+  setCount('cntNeeds', needs);
+  setCount('cntWorking', working);
+  setCount('cntFinished', finished);
+  const needsDot = document.querySelector('#tbCounts [data-wb-filter="needsYou"] .ui-dot');
+  if (needsDot) needsDot.style.color = hasError ? 'var(--st-error)' : 'var(--st-waiting)';
 
   renderToday();
   renderSide();
-  const working = count((s) => ACTIVE.has(s));
-  const needs = count(GROUPS[0].match);
   document.title = (needs ? `(${needs}!) ` : working ? `(${working}) ` : '') + L.title;
 
   const main = document.getElementById('main');
   const officeMode = state.view === 'office';
   const topoMode = state.view === 'topo';
+  const wbMode = state.view === 'workbench';
+  const timelineMode = state.view === 'timeline';
   document.body.classList.toggle('listview', state.view === 'list');
+  document.body.classList.toggle('hide-side', wbMode || timelineMode);
   document.getElementById('officeWrap').style.display = officeMode ? '' : 'none';
   document.getElementById('topoWrap').hidden = !topoMode;
+  document.getElementById('wb').hidden = !wbMode;
+  document.getElementById('tl').hidden = !timelineMode;
   // The office decides who sits at a desk and who wanders around.
   const officeList = all;
   const poppedOut = !!popout?.win;
@@ -763,6 +859,9 @@ function render() {
   document.getElementById('idleToggle').style.display = officeMode && !state.full ? 'none' : '';
   if (poppedOut) {
     document.getElementById('officeWrap').style.display = 'none';
+    document.getElementById('wb').hidden = true;
+    document.getElementById('tl').hidden = true;
+    document.body.classList.add('listview');
     main.innerHTML = `<div class="empty">${esc(L.pipOn)}</div>`;
     hideTip();
     return;
@@ -776,6 +875,15 @@ function render() {
   if (topoMode) {
     main.innerHTML = '';
     drawTopo();
+    return;
+  }
+  if (wbMode) {
+    main.innerHTML = '';
+    window.Workbench?.render?.();
+    return;
+  }
+  if (timelineMode) {
+    main.innerHTML = '';
     return;
   }
   const groups = PIP ? GROUPS.slice(0, 2) : GROUPS;
@@ -832,6 +940,7 @@ function onData(data) {
   }
   state.data = data;
   state.loaded = true;
+  if (!hbReady) sampleHeartbeat();
   syncControls();
   applyLang(chooseLang(data.lang));
   render();
@@ -866,7 +975,6 @@ function connect() {
 
 // Native disclosure keeps settings keyboard-accessible without a modal focus trap.
 const settingsMenu = document.getElementById('settingsMenu');
-const todayMenu = document.getElementById('todayMenu');
 // Toolbar menus: one open at a time; a click outside or Escape closes them.
 const MENUS = [...document.querySelectorAll('details.menu')];
 function closeMenus() { for (const m of MENUS) m.open = false; }
@@ -881,13 +989,47 @@ document.addEventListener('keydown', (e) => {
 });
 settingsMenu.addEventListener('toggle', () => { if (settingsMenu.open) hideTip(); });
 
+function setQuality(v) {
+  state.quality = v; store.set('quality', v); hideTip(); syncControls(); makeOffice();
+}
 document.getElementById('qualSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  state.quality = b.dataset.v; store.set('quality', state.quality); hideTip(); syncControls(); makeOffice();
+  setQuality(b.dataset.v);
 });
+document.getElementById('qualitySelect').addEventListener('change', (e) => setQuality(e.target.value));
+function setView(v) {
+  state.view = v; store.set('view', v); hideTip(); syncControls(); render();
+  if (state.view === 'office') office?.setInset(panelInset(), false);
+}
 document.getElementById('viewSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  state.view = b.dataset.v; store.set('view', state.view); hideTip(); syncControls(); render();
+  setView(b.dataset.v);
+});
+document.getElementById('legacyView').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v) setView(v);
+  else if (state.view === 'topo' || state.view === 'list') setView('workbench');
+  closeMenus();
+});
+document.getElementById('tbCounts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wb-filter]'); if (!b) return;
+  state.wbFilter = b.dataset.wbFilter;
+  if (state.view !== 'workbench') setView('workbench');
+  window.dispatchEvent(new CustomEvent('wb:filter', { detail: { filter: state.wbFilter } }));
+});
+const wbSearch = document.getElementById('wbSearch');
+wbSearch.addEventListener('input', () => {
+  state.wbQuery = wbSearch.value;
+  window.dispatchEvent(new CustomEvent('wb:query', { detail: { query: state.wbQuery } }));
+});
+document.addEventListener('keydown', (e) => {
+  const editable = e.target.closest?.('input, select, textarea, [contenteditable]');
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault(); closeMenus(); wbSearch.focus(); wbSearch.select(); return;
+  }
+  if (e.key === '/' && !editable && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); closeMenus(); wbSearch.focus(); wbSearch.select();
+  }
 });
 document.getElementById('themeSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -907,19 +1049,58 @@ soundBox.addEventListener('change', () => {
 });
 showAgent.addEventListener('change', () => { state.showAgent = showAgent.checked; store.set('showAgent', state.showAgent); syncControls(); render(); });
 
+// The left group sheds the heartbeat, then the counts, when its labels no
+// longer fit the middle column (English labels are wider than Chinese).
+function syncTopbar() {
+  const bar = document.getElementById('topbar');
+  if (!bar) return;
+  const left = bar.querySelector('.tb-left');
+  if (!left) return;
+  bar.classList.remove('tb-hide-hb', 'tb-hide-counts');
+  if (left.scrollWidth > left.clientWidth + 1) bar.classList.add('tb-hide-hb');
+  if (left.scrollWidth > left.clientWidth + 1) bar.classList.add('tb-hide-counts');
+}
+
+// The selected view's background slides between the three labels.
+function syncViewSeg() {
+  const seg = document.getElementById('viewSeg');
+  const thumb = document.getElementById('segThumb');
+  if (!seg || !thumb) return;
+  const on = seg.querySelector('button.on');
+  if (!on) { thumb.style.opacity = '0'; return; }
+  thumb.style.opacity = '1';
+  thumb.style.width = `${on.offsetWidth}px`;
+  thumb.style.transform = `translateX(${on.offsetLeft}px)`;
+}
+addEventListener('resize', () => { syncViewSeg(); syncTopbar(); });
+
 const notifyBtn = document.getElementById('notify');
 function syncControls() {
   const view = state.view;
-  document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.view));
-  document.querySelectorAll('#qualSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.quality));
+  document.querySelectorAll('#viewSeg button').forEach((b) => {
+    const on = b.dataset.v === view;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  syncViewSeg();
+  requestAnimationFrame(syncTopbar);
+  document.querySelectorAll('#qualSeg button').forEach((b) => {
+    const on = b.dataset.v === state.quality;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  document.getElementById('qualitySelect').value = state.quality;
+  const legacy = view === 'topo' || view === 'list' ? view : '';
+  document.getElementById('legacyView').value = legacy;
   document.getElementById('qualSeg').style.display = view === 'office' ? '' : 'none';
   document.getElementById('sceneMenu').hidden = view !== 'office' || state.quality !== 'high';
-  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.classList.contains('on')));
   showSub.checked = state.showSub;
   showIdle.checked = state.showIdle;
   soundBox.checked = state.sound;
   showAgent.checked = state.showAgent;
   document.getElementById('agentBadgeToggle').style.display = view === 'office' ? '' : 'none';
+  const about = document.getElementById('aboutVer');
+  if (about) about.textContent = verInfo ? `v${verInfo.version}` : '';
   popout?.sync(PIP, view);
   // On only when both the switch and the browser allow it; blocked shows how to unblock.
   const perm = window.Notification ? Notification.permission : 'unsupported';
@@ -1095,6 +1276,8 @@ const verEl = document.getElementById('ver');
 let verInfo = null;
 function renderVersion() {
   if (!verInfo) return;
+  const about = document.getElementById('aboutVer');
+  if (about) about.textContent = `v${verInfo.version}`;
   let html = `<span>v${esc(verInfo.version)}</span>`;
   if (verInfo.updateAvailable) {
     html = verInfo.canUpdate
@@ -1128,18 +1311,19 @@ function loadVersion() {
 loadVersion();
 setInterval(loadVersion, 30 * 60 * 1000);
 
-// Language: a list of the nine translations plus Auto, in a toolbar menu.
+// Language: Auto plus the nine translations, as a compact select in settings.
 function renderLangMenu() {
   const pick = store.get('lang', 'auto');
-  document.getElementById('langName').textContent = pick === 'auto' ? L.auto : I18N[pick]?.langName || L.auto;
-  const item = (v, label, sub) => `<button role="option" aria-selected="${v === pick}" data-lang="${v}" class="${v === pick ? 'on' : ''}"><span class="lbl">${esc(label)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}${CHECK}</button>`;
-  document.getElementById('langList').innerHTML = item('auto', L.auto, I18N[chooseLangAuto()]?.langName) +
-    Object.entries(I18N).map(([k, v]) => item(k, v.langName)).join('');
+  const sel = document.getElementById('langSelect');
+  if (!sel) return;
+  const autoName = I18N[chooseLangAuto()]?.langName || '';
+  sel.innerHTML = `<option value="auto">${esc(L.auto)}${autoName ? ` · ${esc(autoName)}` : ''}</option>` +
+    Object.entries(I18N).map(([k, v]) => `<option value="${esc(k)}">${esc(v.langName)}</option>`).join('');
+  sel.value = pick;
 }
 function chooseLangAuto() { return (state.data.lang && I18N[state.data.lang] ? state.data.lang : i18nFromBrowser(navigator.languages || [navigator.language])) || 'en'; }
-document.getElementById('langList').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-lang]'); if (!b) return;
-  store.set('lang', b.dataset.lang); state.lang = b.dataset.lang;
+document.getElementById('langSelect').addEventListener('change', (e) => {
+  store.set('lang', e.target.value); state.lang = e.target.value;
   applyLang(chooseLang(state.data.lang));
   renderLangMenu(); render();
   closeMenus();
@@ -1188,7 +1372,8 @@ function hhmm(ms) {
 // How much of the office the open panel covers. On phones the panel is an
 // overlay over most of the screen, so the view doesn't move for it.
 function panelInset() {
-  return state.full && state.side && !matchMedia('(max-width: 760px)').matches ? sideEl.getBoundingClientRect().width || 340 : 0;
+  const hidden = document.body.classList.contains('hide-side');
+  return state.full && state.side && !hidden && !matchMedia('(max-width: 760px)').matches ? sideEl.getBoundingClientRect().width || 340 : 0;
 }
 function setSide(open, remember = true) {
   state.side = open;
@@ -1232,10 +1417,11 @@ function renderChips() {
   }).join('');
   const box = document.getElementById('agentChips');
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
-  // The button says what is shown: All, one or two names, or how many.
+  // The label says what is shown: All, one or two names, or how many.
   const names = state.agents.map((a) => AGENT_NAME[a] || a);
-  document.getElementById('agentName').textContent = all ? L.all : names.length <= 2 ? names.join(', ') : `${names.length}`;
-  document.getElementById('agentMenu').classList.toggle('active', !all);
+  const nameEl = document.getElementById('agentName');
+  if (nameEl) nameEl.textContent = all ? L.all : names.length <= 2 ? names.join(', ') : `${names.length}`;
+  document.getElementById('agentMenu')?.classList.toggle('active', !all);
 }
 document.getElementById('agentChips').addEventListener('click', (e) => {
   const b = e.target.closest('.chip-f'); if (!b) return;
@@ -1427,19 +1613,24 @@ function renderDetail(scrollDown) {
 }
 const GEAR = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>';
 
-async function loadConvo(s) {
+async function loadConvo(s, target = convo, done) {
   const key = s.key, at = s.lastEventAt;
-  convo.busy = true;
+  target.busy = true;
   try {
     const r = await fetch(`/api/transcript?key=${encodeURIComponent(key)}`);
     const d = await r.json().catch(() => ({}));
-    if (convo.key !== key) return;
-    convo = { key, at, messages: Array.isArray(d.messages) ? d.messages : [], private: !!d.private, busy: false };
+    if (target.key !== key) return;
+    target.key = key;
+    target.at = at;
+    target.messages = Array.isArray(d.messages) ? d.messages : [];
+    target.private = !!d.private;
+    target.busy = false;
   } catch {
-    if (convo.key === key) convo.busy = false;
+    if (target.key === key) target.busy = false;
     return;
   }
-  if (sel === key) renderDetail();
+  if (done) done();
+  else if (sel === key) renderDetail();
 }
 
 document.getElementById('sideHide').addEventListener('click', () => setSide(false));
@@ -1669,5 +1860,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 </script>
+<script src="/ui/workbench.js"></script>
 </body>
 </html>

@@ -299,7 +299,7 @@ html[data-theme="dark"] {
 .ui-shimmer {
   background-image: linear-gradient(100deg, currentColor 38%, var(--ink) 50%, currentColor 62%);
   background-size: 250% 100%;
-  background-repeat: no-repeat;
+  background-repeat: repeat-x;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
