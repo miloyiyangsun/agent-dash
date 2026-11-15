@@ -486,7 +486,7 @@
     </aside>
     <button class="wb-right-tab" id="wbRightShow" type="button"><span data-t="wbProperties"></span></button>
   </div>
-  <div id="tl" hidden><div class="wb-empty" data-t="timelineWip"></div></div>
+  <div id="tl" hidden></div>
   <main id="main"></main>
 </div>
 <div id="lightbox">
@@ -894,6 +894,7 @@ function render() {
   }
   if (timelineMode) {
     main.innerHTML = '';
+    window.Timeline?.render?.();
     return;
   }
   const groups = PIP ? GROUPS.slice(0, 2) : GROUPS;
@@ -1896,5 +1897,6 @@ document.addEventListener('keydown', (e) => {
 <script src="/ui/detail.js"></script>
 <script src="/ui/aside.js"></script>
 <script src="/ui/workbench.js"></script>
+<script src="/ui/timeline.js"></script>
 </body>
 </html>

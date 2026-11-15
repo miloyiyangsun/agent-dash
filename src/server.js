@@ -87,6 +87,7 @@ function view(s, now, { privacy }) {
     out.images = s.images || 0;
     out.thinkingTokens = s.thinkingTokens || 0;
     out.run = s.base || null;
+    out.events = Array.isArray(s.events) ? s.events : null;
     out.prompt = s.prompt || out.prompt;
     out.title = s.title || out.title;
   }

@@ -212,11 +212,27 @@ function newSession(base, file) {
     pid: null,
     mtime: 0,
     pending: new Map(),
+    events: [],
   };
 }
 
 function bump(s, at) {
   if (at && at > (s.lastEventAt || 0)) s.lastEventAt = at;
+}
+
+// The timeline draws one tick per tool call / reply / final answer / error.
+// Events are [ms, letter]; past 400 entries every other one is dropped so the
+// head and tail survive and a long run still costs the page a small array.
+const EVENTS_MAX = 400;
+function pushEvent(s, at, type) {
+  const ts = Number.isFinite(at) ? at : Date.now();
+  s.events.push([ts, type]);
+  if (s.events.length <= EVENTS_MAX) return;
+  const keep = [];
+  for (let i = 0; i < s.events.length; i++) {
+    if (i === 0 || i === s.events.length - 1 || i % 2 === 1) keep.push(s.events[i]);
+  }
+  s.events = keep;
 }
 
 function apply(s, o) {
@@ -245,6 +261,7 @@ function apply(s, o) {
       if (c.type === 'text' && c.text) {
         s.reply = c.text;
         if (s.status !== 'tool') s.status = 'typing';
+        pushEvent(s, at, 's');
       } else if (c.type === 'thinking') {
         if (c.thinking && s.status !== 'tool') s.status = 'thinking';
       } else if (c.type === 'tool_use') {
@@ -252,6 +269,7 @@ function apply(s, o) {
         s.pending.set(c.id, { name: c.name, label });
         s.status = 'tool';
         s.activity = clip(label, 120);
+        pushEvent(s, at, 't');
       }
     }
     if (!s.turnStartedAt) s.turnStartedAt = at || s.startedAt;
@@ -279,12 +297,19 @@ function apply(s, o) {
     return;
   }
 
+  if (t === 'error') {
+    pushEvent(s, at, 'e');
+    bump(s, at);
+    return;
+  }
+
   if (t === 'result') {
     s.done = true;
     s.isError = !!o.is_error;
     s.status = s.isError ? 'error' : 'done';
     s.pending.clear();
     s.activity = null;
+    pushEvent(s, at, s.isError ? 'e' : 'f');
     if (typeof o.result === 'string' && o.result.trim()) s.reply = o.result;
     if (Number.isFinite(o.total_cost_usd)) s.cost = o.total_cost_usd;
     if (Number.isFinite(o.num_turns)) s.numTurns = o.num_turns;

@@ -711,27 +711,10 @@
 
   // ---------- render ----------
 
-  function render() {
-    const wbEl = document.getElementById('wb');
-    if (!wbEl || wbEl.hidden) {
-      wasVisible = false;
-      return;
-    }
-    const justShown = !wasVisible;
-    wasVisible = true;
-    const now = Date.now() - (state.skew || 0);
-    const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
-    lastByKey = new Map(sessions.map((s) => [s.key, s]));
-
-    if (state.wbSel && !lastByKey.has(state.wbSel)) {
-      state.wbSel = null;
-      window.dispatchEvent(new CustomEvent('wb:select', { detail: { key: null } }));
-    }
-    if (cursor && !lastByKey.has(cursor)) cursor = null;
-
-    const present = new Set(sessions.map((s) => s.agent));
-    for (const a of [...agentFilter]) if (!present.has(a)) agentFilter.delete(a);
-
+  // The filtered, grouped tree that both the workbench list and the timeline
+  // draw. Filters and search live in this module, so the timeline reuses this
+  // instead of keeping a second copy of the rules.
+  function buildView(sessions, now) {
     const tree = buildTree(sessions);
     const q = query.trim().toLowerCase();
     const titleCache = new Map();
@@ -776,6 +759,32 @@
     const collapsedByG = new Map();
     for (const g of viewGroups) collapsedByG.set(g.key, isCollapsed(g, now));
 
+    return { viewGroups, getTitle, collapsedByG, visibleRowCount };
+  }
+
+  function render() {
+    const wbEl = document.getElementById('wb');
+    if (!wbEl || wbEl.hidden) {
+      wasVisible = false;
+      return;
+    }
+    const justShown = !wasVisible;
+    wasVisible = true;
+    const now = Date.now() - (state.skew || 0);
+    const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    lastByKey = new Map(sessions.map((s) => [s.key, s]));
+
+    if (state.wbSel && !lastByKey.has(state.wbSel)) {
+      state.wbSel = null;
+      window.dispatchEvent(new CustomEvent('wb:select', { detail: { key: null } }));
+    }
+    if (cursor && !lastByKey.has(cursor)) cursor = null;
+
+    const present = new Set(sessions.map((s) => s.agent));
+    for (const a of [...agentFilter]) if (!present.has(a)) agentFilter.delete(a);
+
+    const { viewGroups, getTitle, collapsedByG, visibleRowCount } = buildView(sessions, now);
+
     const selectable = [];
     const openKeys = new Set();
     const gkeyOf = new Map();
@@ -798,7 +807,7 @@
     lastGKeyOf = gkeyOf;
     activeKeyNow = cursor && openKeys.has(cursor) ? cursor : (state.wbSel && openKeys.has(state.wbSel) ? state.wbSel : null);
 
-    const filterSig = statusFilter + '|' + [...agentFilter].sort().join(',') + '|' + q;
+    const filterSig = statusFilter + '|' + [...agentFilter].sort().join(',') + '|' + query.trim().toLowerCase();
     const viewSig = viewGroups
       .map((g) => g.key + ':' + (g.kind === 'master' ? g.visibleKids.map((k) => k.key).join(',') : g.rows.map((k) => k.key).join(',')))
       .join('|');
@@ -1019,6 +1028,9 @@
     const editable = (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) ||
       (ae && ae.closest && ae.closest('input, textarea, select, [contenteditable]'));
     if (editable) return;
+    // The timeline has its own j/k; only move this tree while it is on screen.
+    const wbEl = document.getElementById('wb');
+    if (!wbEl || wbEl.hidden) return;
     if ((e.key === 'j' || e.key === 'J') && !e.shiftKey) { e.preventDefault(); moveCursor(1); return; }
     if ((e.key === 'k' || e.key === 'K') && !e.shiftKey) { e.preventDefault(); moveCursor(-1); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); return; }
@@ -1121,6 +1133,10 @@
     }));
   }
 
-  window.Workbench = { init, render, select, onLang: render, titleOf, debugOrder, debugGroups };
+  window.Workbench = {
+    init, render, select, onLang: render, titleOf,
+    fmtDur, relTime, secondLine, buildTree, buildView, isCollapsed, setCollapsed,
+    STATUS_FILTERS, FILTER_ALIAS, debugOrder, debugGroups,
+  };
   init();
 })();
