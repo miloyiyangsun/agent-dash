@@ -14,6 +14,8 @@ const STATIC = {
   '/popout.js': ['popout.js', 'text/javascript; charset=utf-8'],
   '/theme.css': ['theme.css', 'text/css; charset=utf-8'],
   '/ui/tokens.css': ['ui/tokens.css', 'text/css; charset=utf-8'],
+  '/ui/workbench.js': ['ui/workbench.js', 'text/javascript; charset=utf-8'],
+  '/ui/timeline.js': ['ui/timeline.js', 'text/javascript; charset=utf-8'],
 };
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
 // 3D models, served as-is (3D view only).
