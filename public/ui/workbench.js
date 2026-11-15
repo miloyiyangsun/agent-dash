@@ -630,6 +630,14 @@
       if (n) n.textContent = String(a ? countsByAgent.get(a) || 0 : sessions.length);
       chip.classList.toggle('is-accent', a ? agentFilter.has(a) : agentFilter.size === 0);
     }
+    updateAgentOverflow();
+  }
+
+  // F5: the agent row is one horizontal strip; the fade mask only turns on
+  // when the chips really overflow, so a short row keeps crisp edges.
+  function updateAgentOverflow() {
+    if (!agentRowEl) return;
+    agentRowEl.classList.toggle('is-over', agentRowEl.scrollWidth > agentRowEl.clientWidth + 1);
   }
 
   function makeEmpty() {
@@ -882,10 +890,13 @@
         const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
         if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
       }
+      window.WbAside?.render?.(null, now);
       return;
     }
     // T4a: the detail pane owns its own header, strip, tabs and transcript.
     if (window.WbDetail) window.WbDetail.render(box, s, now);
+    // T5: the right column mirrors the selected task (properties / files / images).
+    window.WbAside?.render?.(s, now);
   }
 
   function setRight(open) {
@@ -1091,6 +1102,7 @@
     });
     document.addEventListener('keydown', onKeyDown);
     setInterval(tickTimes, 1000);
+    window.addEventListener('resize', updateAgentOverflow);
 
     statusFilter = FILTER_ALIAS[state.wbFilter] || 'all';
     query = String(state.wbQuery || '');

@@ -15,6 +15,9 @@ const path = require('path');
 
 const HEAD_BYTES = 256 * 1024;
 const TAIL_BYTES = 1024 * 1024;
+// Old runs beyond the tracker cap only need the init line and the result line.
+const LITE_HEAD = 64 * 1024;
+const LITE_TAIL = 256 * 1024;
 // Opening a conversation re-reads a bigger window; older runs get the tail only.
 const TRANSCRIPT_TAIL = 8 * 1024 * 1024;
 const TRANSCRIPT_LIMIT = 120;
@@ -301,8 +304,9 @@ class DeepSeek {
     this.windowMs = hours * 3600 * 1000;
     this.interval = interval;
     this.trackers = new Map();   // file -> { session, offset, partial }
+    this.lites = new Map();      // file -> { mtime, size, session } (old runs, summary only)
     this.meta = new Map();       // file -> { mtime, data }
-    this.tcache = new Map();     // key -> { mtime, size, messages }
+    this.tcache = new Map();     // key|limit -> { mtime, size, messages }
     this.lastScan = 0;
     this.files = [];
     this.delegations = new DelegationIndex(claudeDir, hours);
@@ -349,18 +353,46 @@ class DeepSeek {
       next.push(f);
       seen.add(f.file);
     }
-    // Keep the live ones and the newest finished ones; drop the rest.
+    // The newest runs get a live tracker; older runs inside the window keep a
+    // head+tail summary only (no incremental stream; transcript read on demand).
     next.sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
-    if (next.length > MAX_TRACKERS) next.length = MAX_TRACKERS;
-    for (const f of next) if (!this.trackers.has(f.file)) this.open(f, now);
-    for (const file of [...this.trackers.keys()]) if (!seen.has(file)) this.trackers.delete(file);
-    this.files = next;
+    const full = next.slice(0, MAX_TRACKERS);
+    const old = next.slice(MAX_TRACKERS);
+    const fullSet = new Set(full.map((f) => f.file));
+    for (const f of full) if (!this.trackers.has(f.file)) this.open(f, now);
+    for (const file of [...this.trackers.keys()]) if (!fullSet.has(file)) this.trackers.delete(file);
+    for (const f of old) {
+      const hit = this.lites.get(f.file);
+      if (hit && hit.mtime === f.st.mtimeMs && hit.size === f.st.size) continue;
+      this.lites.set(f.file, { mtime: f.st.mtimeMs, size: f.st.size, session: this.summary(f, now) });
+    }
+    for (const file of [...this.lites.keys()]) {
+      if (!seen.has(file) || fullSet.has(file)) this.lites.delete(file);
+    }
+    this.files = full;
     return true;
   }
 
   // A fresh run: parse its head (the init line) and its tail (whatever has piled
-  // up already), then follow only what is appended from here on.
+  // up already). Tracked runs then follow only what is appended from here on.
   open(f, now) {
+    const s = this.build(f, now, HEAD_BYTES, TAIL_BYTES);
+    this.trackers.set(f.file, { session: s, offset: f.st.size, partial: '' });
+  }
+
+  // Old runs beyond the tracker cap: a small head+tail read, pruned state, no
+  // offset. The result line carries the authoritative turn count.
+  summary(f, now) {
+    const s = this.build(f, now, LITE_HEAD, LITE_TAIL);
+    s.pending = new Map();
+    s.activity = null;
+    if (s.prompt) s.prompt = clip(s.prompt, 4000);
+    if (s.reply) s.reply = clip(s.reply, 4000);
+    if (s.error) s.error = clip(s.error, 1000);
+    return s;
+  }
+
+  build(f, now, headBytes, tailBytes) {
     const meta = this.loadMeta(f.file);
     const s = newSession(f.base, f.file);
     if (meta) {
@@ -374,18 +406,15 @@ class DeepSeek {
     s.mtime = f.st.mtimeMs;
     if (!s.startedAt) s.startedAt = Math.round(f.st.birthtimeMs || f.st.mtimeMs);
 
-    const t = { session: s, offset: 0, partial: '' };
-    this.trackers.set(f.file, t);
-
     const size = f.st.size;
-    const readHead = Math.min(size, HEAD_BYTES);
+    const readHead = Math.min(size, headBytes);
     const head = readRange(f.file, 0, readHead);
     const parts = head.toString('utf8').split('\n');
     if (readHead < size) parts.pop();
     for (const line of parts) this.applyLine(s, line);
 
     if (size > readHead) {
-      const tailStart = Math.max(readHead, size - TAIL_BYTES);
+      const tailStart = Math.max(readHead, size - tailBytes);
       const tail = readRange(f.file, tailStart, size);
       const tailParts = tail.toString('utf8').split('\n');
       // The first piece starts mid-line; the last is dropped in case it is partial.
@@ -393,8 +422,8 @@ class DeepSeek {
       tailParts.pop();
       for (const line of tailParts) this.applyLine(s, line);
     }
-    t.offset = size;
     if (!s.title) s.title = taskTag(s.prompt);
+    return s;
   }
 
   applyLine(s, line) {
@@ -452,39 +481,48 @@ class DeepSeek {
 
   sessions(now = Date.now()) {
     const out = [];
-    for (const t of this.trackers.values()) {
-      const s = t.session;
-      const meta = this.loadMeta(s.file);
-      if (meta && s.pid == null && Number.isFinite(meta.pid)) s.pid = meta.pid;
-      s.delegate = this.delegations.parentOf(s);
-      // Order: meta.prompt → the prompt inside the delegation command → empty.
-      if (!s.prompt) {
-        const fromDelegate = this.delegatedPrompt(s);
-        if (fromDelegate) {
-          s.prompt = fromDelegate;
-          if (!s.title) s.title = taskTag(fromDelegate);
+    const groups = [
+      { lite: false, list: [...this.trackers.values()].map((t) => t.session) },
+      { lite: true, list: [...this.lites.values()].map((l) => l.session) },
+    ];
+    for (const { lite, list } of groups) {
+      for (const s of list) {
+        const meta = this.loadMeta(s.file);
+        if (meta && s.pid == null && Number.isFinite(meta.pid)) s.pid = meta.pid;
+        s.delegate = this.delegations.parentOf(s);
+        // Order: meta.prompt → the prompt inside the delegation command → empty.
+        if (!s.prompt) {
+          const fromDelegate = this.delegatedPrompt(s);
+          if (fromDelegate) {
+            s.prompt = fromDelegate;
+            if (!s.title) s.title = taskTag(fromDelegate);
+          }
         }
-      }
-      // ask_deepseek.py now records the brain's own session id in the meta.
-      // That explicit link wins over any transcript-based guess.
-      const metaParent = meta && typeof meta.parent_session_id === 'string' ? meta.parent_session_id : null;
-      s.parentId = metaParent || (s.delegate ? s.delegate.sessionId : null);
+        // ask_deepseek.py now records the brain's own session id in the meta.
+        // That explicit link wins over any transcript-based guess.
+        const metaParent = meta && typeof meta.parent_session_id === 'string' ? meta.parent_session_id : null;
+        s.parentId = metaParent || (s.delegate ? s.delegate.sessionId : null);
 
-      const quiet = now - (s.lastEventAt || s.mtime || now);
-      let status = s.status;
-      if (!s.done && !this.alive(s, now) && quiet > 20_000) status = 'interrupted';
-      if (s.done && s.isError) status = 'error';
+        const quiet = now - (s.lastEventAt || s.mtime || now);
+        let status = s.status;
+        if (!s.done && !this.alive(s, now) && quiet > 20_000) status = 'interrupted';
+        if (s.done && s.isError) status = 'error';
 
-      const live = !s.done;
-      if (!live && quiet > this.windowMs) continue;
-      s.status = status;
-      s.stuck = 0;
-      if (status === 'tool' && s.activity) {
-        const stuckAfter = 10 * 60_000;
-        if (quiet > stuckAfter) s.stuck = Math.floor(quiet / 60_000);
+        const live = !s.done;
+        if (!lite && !live && quiet > this.windowMs) continue;
+        s.status = status;
+        s.stuck = 0;
+        // The result line's num_turns covers the whole run; the event counter
+        // only sees the head+tail window, so prefer the authoritative number.
+        if (Number.isFinite(s.numTurns) && s.numTurns > 0) s.turns = s.numTurns;
+        if (status === 'tool' && s.activity) {
+          const stuckAfter = 10 * 60_000;
+          if (quiet > stuckAfter) s.stuck = Math.floor(quiet / 60_000);
+        }
+        // A run that started before midnight still belongs to the day it last moved.
+        s.daily = { day: dayKey(s.lastEventAt || now), turns: s.turns, tokens: s.outTokens || s.thinkingTokens || 0 };
+        out.push(s);
       }
-      s.daily = { day: dayKey(now), turns: s.turns, tokens: s.outTokens || s.thinkingTokens || 0 };
-      out.push(s);
     }
     return out;
   }
@@ -494,18 +532,27 @@ class DeepSeek {
   childSessionIds() {
     const ids = new Set();
     for (const t of this.trackers.values()) if (t.session.sessionId) ids.add(t.session.sessionId);
+    for (const l of this.lites.values()) if (l.session.sessionId) ids.add(l.session.sessionId);
     return ids;
   }
 
   // ---- transcript: what the child read, thought and said, in order ----------
 
-  transcript(key) {
-    const t = [...this.trackers.values()].find((x) => `deepseek:${x.session.base}` === key);
-    if (!t) return null;
-    const s = t.session;
+  sessionFor(key) {
+    for (const t of this.trackers.values()) if (`deepseek:${t.session.base}` === key) return t.session;
+    for (const l of this.lites.values()) if (`deepseek:${l.session.base}` === key) return l.session;
+    return null;
+  }
+
+  transcript(key, opts) {
+    const s = this.sessionFor(key);
+    if (!s) return null;
     const st = statSafe(s.file);
     if (!st) return null;
-    const cached = this.tcache.get(key);
+    const n = Number(opts && opts.limit);
+    const limit = Number.isFinite(n) && n > 0 ? Math.min(500, Math.max(1, Math.floor(n))) : TRANSCRIPT_LIMIT;
+    const cacheKey = `${key}|${limit}`;
+    const cached = this.tcache.get(cacheKey);
     if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) return cached.messages;
 
     const start = Math.max(0, st.size - TRANSCRIPT_TAIL);
@@ -516,7 +563,7 @@ class DeepSeek {
     let pendingImages = 0;
 
     const push = (m) => {
-      if (messages.length >= TRANSCRIPT_LIMIT) messages.shift();
+      if (messages.length >= limit) messages.shift();
       messages.push(m);
     };
     // transcript() can be called before sessions(); apply the same meta →
@@ -551,7 +598,8 @@ class DeepSeek {
     for (const m of messages) if (m.images && m.images.length) m.hasImages = m.images.length;
     // Cache the array itself: the API wraps it as { messages }, so a cached
     // wrapper here would double-nest on every hit after the first read.
-    this.tcache.set(key, { mtime: st.mtimeMs, size: st.size, messages });
+    this.tcache.set(cacheKey, { mtime: st.mtimeMs, size: st.size, messages });
+    if (this.tcache.size > 64) this.tcache.delete(this.tcache.keys().next().value);
     return messages;
   }
 
@@ -564,7 +612,16 @@ class DeepSeek {
         } else if (c.type === 'thinking' && c.thinking && c.thinking.trim()) {
           push({ role: 'thinking', text: clip(c.thinking, THINK_MAX), at, kind: 'thinking' });
         } else if (c.type === 'tool_use') {
-          const m = { role: 'tool', id: c.id, name: c.name, text: clip(toolArg(c.input), ARG_MAX), at, result: null, images: [] };
+          const m = {
+            role: 'tool',
+            id: c.id,
+            name: c.name,
+            path: (c.input && (c.input.file_path || c.input.notebook_path || c.input.path)) || null,
+            text: clip(toolArg(c.input), ARG_MAX),
+            at,
+            result: null,
+            images: [],
+          };
           tools.set(c.id, m);
           push(m);
         }
@@ -621,14 +678,14 @@ class DeepSeek {
 
   // Serve one embedded image straight out of the run log, never via memory cache.
   image(key, start, len) {
-    const t = [...this.trackers.values()].find((x) => `deepseek:${x.session.base}` === key);
-    if (!t) return null;
-    const st = statSafe(t.session.file);
+    const s = this.sessionFor(key);
+    if (!s) return null;
+    const st = statSafe(s.file);
     if (!st) return null;
     if (!Number.isFinite(start) || !Number.isFinite(len) || start < 0 || len <= 0) return null;
     if (len > 24 * 1024 * 1024) return null;
     if (start + len > st.size) return null;
-    const raw = readRange(t.session.file, start, start + len);
+    const raw = readRange(s.file, start, start + len);
     if (!raw.length) return null;
     // What sits in the log is base64 text; the browser wants actual bytes.
     const text = raw.toString('latin1');

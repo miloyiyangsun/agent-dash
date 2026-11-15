@@ -116,6 +116,89 @@
     return `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`;
   }
 
+  // ---------- light markdown ----------
+  // Safety rule: escape the whole text first, then run a tiny grammar over the
+  // escaped string. Only our own tags ever reach innerHTML; raw HTML and images
+  // are never rendered. Thinking blocks and tool arguments stay plain text.
+
+  function mdInline(src) {
+    const codes = [];
+    let s = String(src).replace(/`([^`\n]+)`/g, (_, code) => {
+      codes.push(`<code class="md-code-i">${code}</code>`);
+      return `\u0000${codes.length - 1}\u0000`;
+    });
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+    // Images degrade to their alt text; links keep their label, never an <a>.
+    s = s.replace(/!\[([^\]]*)\]\([^)\s]*\)/g, '$1');
+    s = s.replace(/\[([^\]]+)\]\([^)\s]*\)/g, '$1');
+    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[Number(i)] || '');
+  }
+
+  function renderMd(src) {
+    const text = esc(String(src || '').replace(/\r\n?/g, '\n'));
+    const lines = text.split('\n');
+    const out = [];
+    let para = [];
+    let i = 0;
+    const flush = () => {
+      if (!para.length) return;
+      out.push(`<p>${para.map((l) => mdInline(l)).join('<br>')}</p>`);
+      para = [];
+    };
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^```/.test(line)) {
+        flush();
+        i++;
+        const buf = [];
+        while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+        if (i < lines.length) i++;
+        out.push(`<pre class="md-pre"><code>${buf.join('\n')}</code></pre>`);
+        continue;
+      }
+      if (!line.trim()) { flush(); i++; continue; }
+      const h = /^(#{1,4})\s+(.*)$/.exec(line);
+      if (h) {
+        flush();
+        const n = h[1].length;
+        out.push(`<h${n} class="md-h">${mdInline(h[2])}</h${n}>`);
+        i++;
+        continue;
+      }
+      if (/^\s*&gt;\s?/.test(line)) {
+        flush();
+        const buf = [];
+        while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) {
+          buf.push(lines[i].replace(/^\s*&gt;\s?/, ''));
+          i++;
+        }
+        out.push(`<blockquote class="md-quote">${buf.map((l) => mdInline(l)).join('<br>')}</blockquote>`);
+        continue;
+      }
+      const ul = /^\s*[-*+]\s+(.*)$/.exec(line);
+      const ol = /^\s*\d+[.)]\s+(.*)$/.exec(line);
+      if (ul || ol) {
+        flush();
+        const ordered = !!ol;
+        const re = ordered ? /^\s*\d+[.)]\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/;
+        const items = [];
+        while (i < lines.length) {
+          const m = re.exec(lines[i]);
+          if (!m) break;
+          items.push(`<li>${mdInline(m[1])}</li>`);
+          i++;
+        }
+        out.push(ordered ? `<ol class="md-list">${items.join('')}</ol>` : `<ul class="md-list">${items.join('')}</ul>`);
+        continue;
+      }
+      para.push(line);
+      i++;
+    }
+    flush();
+    return out.join('');
+  }
+
   // ---------- message classification ----------
 
   function kindOf(m) {
@@ -222,21 +305,19 @@
   function metaHtml(s, master) {
     const st = s.status || 'idle';
     const items = [];
-    items.push(`<span class="dt-m"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`);
-    if (s.agent) items.push(`<span class="dt-m"><i>agent</i><span>${esc(agentLabel(s.agent))}</span></span>`);
-    if (master) items.push(`<span class="dt-m"><i>派自</i><button type="button" class="dt-link" data-master-key="${esc(master.key)}">${esc(masterTitle(master))}</button></span>`);
+    items.push(`<span class="dt-m dt-m-fix"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`);
+    if (s.agent) items.push(`<span class="dt-m dt-m-fix"><i>agent</i><span>${esc(agentLabel(s.agent))}</span></span>`);
+    if (master) items.push(`<span class="dt-m dt-m-flex"><i>派自</i><button type="button" class="dt-link" data-master-key="${esc(master.key)}" title="${esc(master.title || master.project || '')}">${esc(masterTitle(master))}</button></span>`);
     if (startOf(s)) {
-      items.push(`<span class="dt-m"><i>开始</i><span class="ui-num">${hhmm(startOf(s))}</span></span>`);
-      items.push('<span class="dt-m"><i>用时</i><span class="ui-num dt-dur"></span></span>');
+      items.push(`<span class="dt-m dt-m-fix"><i>开始</i><span class="ui-num">${hhmm(startOf(s))}</span></span>`);
+      items.push('<span class="dt-m dt-m-fix"><i>用时</i><span class="ui-num dt-dur"></span></span>');
     }
-    if (s.effort) items.push(`<span class="dt-m"><i>档位</i><span>${esc(s.effort)}</span></span>`);
-    if (s.turns) items.push(`<span class="dt-m"><i>轮数</i><span class="ui-num">${s.turns}</span></span>`);
+    if (s.effort) items.push(`<span class="dt-m dt-m-fix"><i>档位</i><span>${esc(s.effort)}</span></span>`);
     // The run summary only counts images seen in its 1 MB tail; the transcript
     // window is what the image tab can actually show, so prefer that once loaded.
     const transcriptImages = S.messages.reduce((n, m) => n + (Array.isArray(m.images) ? m.images.length : 0), 0);
     const images = S.loaded ? transcriptImages : (Number(s.images) || 0);
-    if (images) items.push(`<span class="dt-m"><i>图片</i><span class="ui-num">${images}</span></span>`);
-    if (s.model) items.push(`<span class="dt-m"><i>模型</i><span class="dt-mono">${esc(s.model)}</span></span>`);
+    if (images) items.push(`<span class="dt-m dt-m-fix"><i>图片</i><span class="ui-num">${images}</span></span>`);
     return items.join('');
   }
 
@@ -319,11 +400,14 @@
 
   // ---------- transcript blocks ----------
 
-  function foldHtml(text, lines, cls) {
+  function foldHtml(text, lines, cls, md) {
     const src = String(text || '');
     const long = src.length > lines * 96 || src.split('\n').length > lines;
-    const inner = `<div class="${cls} dt-clamp c${lines}">${esc(src)}</div>`;
-    return long ? `<details class="dt-fold"><summary>${inner}</summary></details>` : `<div class="${cls}">${esc(src)}</div>`;
+    const content = md ? renderMd(src) : esc(src);
+    const inner = md
+      ? `<div class="${cls} md${long ? ' md-clamp' : ''}" style="--clamp-lines:${lines}">${content}</div>`
+      : `<div class="${cls} dt-clamp c${lines}">${content}</div>`;
+    return long ? `<details class="dt-fold"><summary>${inner}</summary></details>` : inner;
   }
 
   function shotGrid(images, name, key, cls) {
@@ -363,7 +447,7 @@
     body.className = 'dt-blk-body';
     const text = String(m.text || '');
     if (kind === 'prompt') {
-      body.innerHTML = `<div class="dt-prompt">${foldHtml(text, 6, 'dt-body-text')}</div>`;
+      body.innerHTML = `<div class="dt-prompt">${foldHtml(text, 6, 'dt-body-text', true)}</div>`;
     } else if (kind === 'think') {
       body.innerHTML = foldHtml(text, 3, 'dt-think-text');
     } else if (kind === 'tool') {
@@ -385,9 +469,9 @@
       if (!html) html = '<div class="dt-note-inline">没有参数或结果</div>';
       body.innerHTML = html;
     } else if (kind === 'final') {
-      body.innerHTML = `<div class="dt-final${m.isError ? ' is-error' : ''}"><div class="dt-final-text">${esc(text)}</div></div>`;
+      body.innerHTML = `<div class="dt-final${m.isError ? ' is-error' : ''}"><div class="dt-final-text md">${renderMd(text)}</div></div>`;
     } else {
-      body.innerHTML = `<div class="dt-say">${esc(text)}</div>`;
+      body.innerHTML = `<div class="dt-say md">${renderMd(text)}</div>`;
     }
     el.appendChild(body);
     return el;
@@ -420,7 +504,7 @@
     if (S.el.sum.dataset.sig === sig) return;
     S.el.sum.dataset.sig = sig;
     S.el.sum.classList.toggle('is-error', !!m.isError);
-    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? '最终错误' : '最终答复'}</span><button type="button" class="dt-link" data-jump-final>跳到全文</button></div><div class="dt-sum-text">${esc(text)}</div>`;
+    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? '最终错误' : '最终答复'}</span><button type="button" class="dt-link" data-jump-final>跳到全文</button></div><div class="dt-sum-text md">${renderMd(text)}</div>`;
   }
 
   // ---------- tabs, counts, images ----------
@@ -832,7 +916,7 @@
     if (S.loaded && S.at === s.lastEventAt) return;
     S.busy = true;
     try {
-      const r = await fetch(`/api/transcript?key=${encodeURIComponent(s.key)}`);
+      const r = await fetch(`/api/transcript?key=${encodeURIComponent(s.key)}&limit=300`);
       const d = await r.json().catch(() => ({}));
       if (S.key !== s.key) return;
       S.loaded = true;
@@ -846,6 +930,7 @@
         syncMessages(list);
         showNote(list.length ? '' : t('noMessages'));
       }
+      window.dispatchEvent(new CustomEvent('wb:convo', { detail: { key: s.key } }));
     } catch {
       if (S.key === s.key) showNote(t('noMessages'));
     } finally {
@@ -880,6 +965,9 @@
       hideTip();
       showPill();
       skeleton(box);
+      // skeleton replaced the empty-state DOM; drop its cache marker so a later
+      // clear() cannot mistake this detail for the empty state.
+      box.dataset.html = '';
       const mid = document.getElementById('wbMid');
       if (mid) mid.scrollTop = 0;
       setTab('all');
@@ -910,10 +998,8 @@
     hideTip();
     showPill();
     const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
-    if (box.dataset.html !== html) {
-      box.innerHTML = html;
-      box.dataset.html = html;
-    }
+    box.innerHTML = html;
+    box.dataset.html = html;
   }
 
   // ---------- ticking durations ----------
@@ -972,6 +1058,14 @@
     setInterval(tick, 1000);
   }
 
-  window.WbDetail = { render, clear, jumpToFinal, debug: () => ({ key: S.key, messages: S.messages.length, blocks: S.blocks.length, tab: S.tab, at: S.at, busy: S.busy, loaded: S.loaded }) };
+  window.WbDetail = {
+    render,
+    clear,
+    jumpToFinal,
+    jumpToBlock,
+    convo: () => ({ key: S.key, messages: S.messages, loaded: S.loaded }),
+    md: renderMd,
+    debug: () => ({ key: S.key, messages: S.messages.length, blocks: S.blocks.length, tab: S.tab, at: S.at, busy: S.busy, loaded: S.loaded }),
+  };
   init();
 })();

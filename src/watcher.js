@@ -601,10 +601,10 @@ class Watcher extends EventEmitter {
   }
 
   // Recent messages of one tracked session, looked up by its key — never by a path from the client.
-  transcript(key) {
-    if (key.startsWith('deepseek:')) return this.deepseek.transcript(key);
+  transcript(key, opts) {
+    if (key.startsWith('deepseek:')) return this.deepseek.transcript(key, opts);
     for (const t of this.trackers.values()) {
-      if (`${t.session.agent}:${t.session.id}` === key) return transcript(t.session, t.apply);
+      if (`${t.session.agent}:${t.session.id}` === key) return transcript(t.session, t.apply, opts);
     }
     return null;
   }

@@ -479,17 +479,22 @@
     </section>
     <section class="wb-mid" id="wbMid"><div class="wb-mid-inner" id="wbDetail"></div></section>
     <aside class="wb-right" id="wbRight">
-      <div class="wb-right-head"><h2 data-t="wbProperties"></h2>
+      <div class="wb-right-head"><h2>属性与产物</h2>
         <button class="icon-btn" id="wbRightHide" type="button" data-a="wbCollapse"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg></button>
       </div>
-      <div class="wb-right-body"><p class="wb-placeholder" data-t="wbPropsPlaceholder"></p></div>
+      <div class="wb-right-body" id="wbAside"></div>
     </aside>
     <button class="wb-right-tab" id="wbRightShow" type="button"><span data-t="wbProperties"></span></button>
   </div>
   <div id="tl" hidden><div class="wb-empty" data-t="timelineWip"></div></div>
   <main id="main"></main>
 </div>
-<div id="lightbox"><img alt=""><span class="cap"></span></div>
+<div id="lightbox">
+  <button type="button" class="lb-nav lb-prev" aria-label="上一张">‹</button>
+  <img alt="">
+  <span class="cap"></span>
+  <button type="button" class="lb-nav lb-next" aria-label="下一张">›</button>
+</div>
 <div class="conn" id="conn" data-t="disconnected"></div>
 <div class="tip" id="tip"></div>
 <div class="ver" id="ver"></div>
@@ -1841,31 +1846,55 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 
 // ---- image lightbox: thumbnails from the run log open full size
 const lightbox = document.getElementById('lightbox');
+let lbList = [];
+let lbIdx = 0;
+function lbShow(i) {
+  if (!lbList.length) return;
+  lbIdx = (i + lbList.length) % lbList.length;
+  const b = lbList[lbIdx];
+  lightbox.querySelector('img').src = b.dataset.shot;
+  const cap = b.dataset.cap || '';
+  lightbox.querySelector('.cap').textContent = lbList.length > 1 ? `${cap} · ${lbIdx + 1}/${lbList.length}` : cap;
+  lightbox.classList.toggle('single', lbList.length < 2);
+}
+function lbOpen(b) {
+  const group = b.closest('.as-grid, .dt-imgrid, .dt-shots');
+  lbList = group ? [...group.querySelectorAll('[data-shot]')] : [b];
+  lbShow(lbList.indexOf(b));
+  lightbox.classList.add('on');
+}
+function lbClose() {
+  lightbox.classList.remove('on');
+  lightbox.querySelector('img').src = '';
+  lbList = [];
+}
 document.addEventListener('click', (e) => {
+  const nav = e.target.closest('.lb-nav');
+  if (nav) {
+    lbShow(lbIdx + (nav.classList.contains('lb-prev') ? -1 : 1));
+    return;
+  }
   const b = e.target.closest('[data-shot]');
   if (b) {
-    const img = lightbox.querySelector('img');
-    img.src = b.dataset.shot;
-    lightbox.querySelector('.cap').textContent = b.dataset.cap || '';
-    lightbox.classList.add('on');
+    lbOpen(b);
     return;
   }
   if (lightbox.classList.contains('on') && (e.target === lightbox || e.target.closest('#lightbox'))) {
-    lightbox.classList.remove('on');
-    lightbox.querySelector('img').src = '';
+    lbClose();
   }
   // a card in the list view opens that agent, like clicking its person does
   const cardEl = e.target.closest('#main .card[data-key]');
   if (cardEl && !e.target.closest('[data-copy]')) openDetail(cardEl.dataset.key);
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && lightbox.classList.contains('on')) {
-    lightbox.classList.remove('on');
-    lightbox.querySelector('img').src = '';
-  }
+  if (!lightbox.classList.contains('on')) return;
+  if (e.key === 'Escape') lbClose();
+  else if (e.key === 'ArrowLeft') lbShow(lbIdx - 1);
+  else if (e.key === 'ArrowRight') lbShow(lbIdx + 1);
 });
 </script>
 <script src="/ui/detail.js"></script>
+<script src="/ui/aside.js"></script>
 <script src="/ui/workbench.js"></script>
 </body>
 </html>

@@ -11,6 +11,11 @@ const { newSession, describeClaudeTool, describeCodexCall, codexText } = require
 
 const TAIL_BYTES = 384 * 1024;
 const LIMIT = 40;
+const MAX_LIMIT = 500;
+// The workbench asks for a much longer conversation: a big tail plus the head,
+// so a session that started hours ago still shows what the user first asked.
+const BIG_TAIL = 8 * 1024 * 1024;
+const BIG_HEAD = 1024 * 1024;
 const TEXT_MAX = 1500;
 
 function text(v) {
@@ -24,17 +29,27 @@ function time(ts) {
   return Number.isFinite(t) ? t : null;
 }
 
-// The last complete lines of a log, never more than TAIL_BYTES.
-function tailLines(file) {
-  const st = fs.statSync(file);
-  const start = Math.max(0, st.size - TAIL_BYTES);
-  const len = st.size - start;
+function readRange(file, start, len) {
+  if (!len) return Buffer.alloc(0);
   const buf = Buffer.alloc(len);
   const fd = fs.openSync(file, 'r');
   try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
-  const lines = buf.toString('utf8').split('\n');
-  if (start > 0) lines.shift(); // the first line was cut in the middle
-  return lines;
+  return buf;
+}
+
+// The last complete lines of a log, never more than tailBytes; the head is
+// prepended for the big window (a 21 MB session's first prompt lives there).
+function windowLines(file, tailBytes, headBytes) {
+  const st = fs.statSync(file);
+  if (st.size <= tailBytes + headBytes) {
+    return readRange(file, 0, st.size).toString('utf8').split('\n');
+  }
+  const head = readRange(file, 0, headBytes).toString('utf8').split('\n');
+  head.pop(); // the last line was cut in the middle
+  const start = st.size - tailBytes;
+  const tail = readRange(file, start, st.size - start).toString('utf8').split('\n');
+  tail.shift(); // the first line was cut in the middle
+  return head.concat(tail);
 }
 
 function* records(lines) {
@@ -58,7 +73,15 @@ function claude(lines) {
     } else if (d.type === 'assistant') {
       for (const b of Array.isArray(d.message?.content) ? d.message.content : []) {
         if (b.type === 'text' && b.text?.trim()) out.push({ role: 'assistant', text: text(b.text), at });
-        else if (b.type === 'tool_use') out.push({ role: 'tool', text: describeClaudeTool(b.name || 'tool', b.input || {}), at });
+        else if (b.type === 'tool_use') {
+          out.push({
+            role: 'tool',
+            name: b.name || 'tool',
+            path: b.input?.file_path || b.input?.notebook_path || null,
+            text: describeClaudeTool(b.name || 'tool', b.input || {}),
+            at,
+          });
+        }
       }
     }
   }
@@ -110,9 +133,15 @@ function replay(lines, session, apply) {
   return out;
 }
 
-const cache = new Map(); // file -> { mtime, size, messages }
+const cache = new Map(); // file|limit -> { mtime, size, messages }
 
-function transcript(session, apply) {
+function limitOf(opts) {
+  const n = Number(opts && opts.limit);
+  if (!Number.isFinite(n) || n <= 0) return LIMIT;
+  return Math.min(MAX_LIMIT, Math.max(1, Math.floor(n)));
+}
+
+function transcript(session, apply, opts) {
   const fallback = () => [
     session.prompt && { role: 'user', text: text(session.prompt), at: session.turnStartedAt },
     session.reply && { role: 'assistant', text: text(session.reply), at: session.lastEventAt },
@@ -122,20 +151,23 @@ function transcript(session, apply) {
   if (!file || !/\.jsonl$/.test(file)) return fallback();
   let st;
   try { st = fs.statSync(file); } catch { return fallback(); }
-  const hit = cache.get(file);
+  const limit = limitOf(opts);
+  const cacheKey = `${file}|${limit}`;
+  const hit = cache.get(cacheKey);
   if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit.messages;
   let messages;
   try {
-    const lines = tailLines(file);
+    const big = limit > LIMIT;
+    const lines = windowLines(file, big ? BIG_TAIL : TAIL_BYTES, big ? BIG_HEAD : 0);
     messages = session.agent === 'claude' ? claude(lines)
       : session.agent === 'codex' ? codex(lines)
         : apply ? replay(lines, session, apply) : [];
   } catch { return fallback(); }
-  messages = messages.filter((m) => m.text).slice(-LIMIT);
+  messages = messages.filter((m) => m.text).slice(-limit);
   if (!messages.length) messages = fallback();
-  cache.set(file, { mtime: st.mtimeMs, size: st.size, messages });
+  cache.set(cacheKey, { mtime: st.mtimeMs, size: st.size, messages });
   if (cache.size > 64) cache.delete(cache.keys().next().value);
   return messages;
 }
 
-module.exports = { transcript, TAIL_BYTES, LIMIT };
+module.exports = { transcript, TAIL_BYTES, LIMIT, MAX_LIMIT };

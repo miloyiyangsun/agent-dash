@@ -16,6 +16,7 @@ const STATIC = {
   '/ui/tokens.css': ['ui/tokens.css', 'text/css; charset=utf-8'],
   '/ui/detail.js': ['ui/detail.js', 'text/javascript; charset=utf-8'],
   '/ui/workbench.js': ['ui/workbench.js', 'text/javascript; charset=utf-8'],
+  '/ui/aside.js': ['ui/aside.js', 'text/javascript; charset=utf-8'],
   '/ui/timeline.js': ['ui/timeline.js', 'text/javascript; charset=utf-8'],
 };
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
@@ -202,7 +203,8 @@ function createServer(watcher, opts, { onShutdown, onRestart } = {}) {
     } else if (url.pathname === '/api/transcript') {
       // --private hides prompts and replies everywhere, so it hides the conversation too.
       const key = url.searchParams.get('key') || '';
-      const messages = opts.privacy || key.length > 600 ? null : watcher.transcript?.(key);
+      const limit = Number(url.searchParams.get('limit'));
+      const messages = opts.privacy || key.length > 600 ? null : watcher.transcript?.(key, { limit: Number.isFinite(limit) ? limit : undefined });
       res.writeHead(messages ? 200 : opts.privacy ? 403 : 404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       res.end(JSON.stringify(messages ? { messages } : { messages: [], private: !!opts.privacy }));
     } else if (url.pathname === '/api/ds/image') {
