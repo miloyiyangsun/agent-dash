@@ -57,6 +57,31 @@
     done: '#5f9a4c', error: '#de4b40', interrupted: '#9b9a94', idle: '#9b9a94',
   };
   const STATUS_COLOR = { ...STATUS_FALLBACK };
+  // Interface tokens for the nameplates and speech bubbles. Canvas cannot read
+  // CSS variables, so cache them and refresh whenever the theme changes.
+  const UI_FALLBACK = {
+    panel: '#f7f3ea', raised: '#fffdf8', line: '#d9cfbd', lineStrong: '#c4b79f',
+    ink: '#241f18', muted: '#6c6355', faint: '#9b917f', bg: '#ece5d6', dark: false,
+  };
+  const UI = { ...UI_FALLBACK };
+  const luminance = (hex) => {
+    const n = parseInt(String(hex).replace('#', ''), 16);
+    if (!Number.isFinite(n)) return 1;
+    const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  };
+  function readUiColors() {
+    let css;
+    try { css = getComputedStyle(document.documentElement); } catch { return; }
+    for (const k of ['panel', 'raised', 'line', 'lineStrong', 'ink', 'muted', 'faint', 'bg']) {
+      const name = k === 'lineStrong' ? '--line-strong' : `--${k}`;
+      UI[k] = css.getPropertyValue(name).trim() || UI_FALLBACK[k];
+    }
+    UI.dark = luminance(UI.bg) < 0.5;
+  }
   function readStatusColors() {
     let css;
     try { css = getComputedStyle(document.documentElement); } catch { return; }
@@ -67,7 +92,15 @@
     STATUS_COLOR.idle = css.getPropertyValue('--st-interrupted').trim() || STATUS_FALLBACK.idle;
   }
   readStatusColors();
-  addEventListener('wmad:theme', readStatusColors);
+  readUiColors();
+  addEventListener('wmad:theme', () => { readStatusColors(); readUiColors(); });
+
+  const SANS = '"Microsoft YaHei UI","PingFang SC",system-ui,sans-serif';
+  const MONO = '"Cascadia Mono","JetBrains Mono",ui-monospace,Consolas,monospace';
+  const clipText = (text, n) => {
+    const chars = Array.from(String(text || '').replace(/\s+/g, ' ').trim());
+    return chars.length > n ? chars.slice(0, n).join('') + '…' : chars.join('');
+  };
 
   const ACT_EMOJI = {
     coffee: '☕', water: '💧', fridge: '🍎', sink: '🫧', stool: '💬', couch: '💬', beanbag: '🎧',
@@ -85,7 +118,9 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   function palette() {
-    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    // A forced theme wins over the system, so the room matches the rest of the UI.
+    const forced = document.documentElement.dataset.theme;
+    const dark = forced ? forced === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     return dark ? {
       dark: true,
       wood1: '#4a3f35', wood2: '#453a31', woodLine: 'rgba(0,0,0,.22)',
@@ -681,7 +716,11 @@
       if (key !== this.hoverKey || click) {
         this.hoverKey = key;
         const p = key && this.people.get(key);
-        this.onHover(p ? p.s : null, { x: e.clientX, y: e.clientY }, !!click);
+        // Anchor the hover card under the person rather than under the mouse.
+        const at = found
+          ? { x: r.left + (found.x0 + found.x1) / 2, y: r.top + found.y1 }
+          : { x: e.clientX, y: e.clientY };
+        this.onHover(p ? p.s : null, at, !!click);
       }
     }
 
@@ -714,7 +753,7 @@
       return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
     }
 
-    roundRect(x, y, w, h, r, fill, stroke) {
+    roundRect(x, y, w, h, r, fill, stroke, lw = 1.5) {
       const c = this.ctx;
       c.beginPath();
       c.moveTo(x + r, y);
@@ -724,7 +763,7 @@
       c.arcTo(x, y, x + w, y, r);
       c.closePath();
       if (fill) { c.fillStyle = fill; c.fill(); }
-      if (stroke) { c.strokeStyle = stroke; c.lineWidth = 1.5; c.stroke(); }
+      if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw; c.stroke(); }
     }
 
     // Draw flat things on a wall: 'y0' = back wall (runs along x),
@@ -1352,126 +1391,274 @@
       return { x, y: headTop, act: st.act };
     }
 
+    // Both renderers call bubble() once per person. The calls are collected and
+    // placed together at the end of the frame, highest priority first, instead
+    // of stamping labels and bubbles in depth order.
     bubble(p, at) {
+      if (this._overlayT !== this.t) {
+        this._overlayT = this.t;
+        this._overlayQ = [];
+      }
+      this._overlayQ.push({ p, at, m: this.ctx.getTransform() });
+      if (this._overlayScheduled) return;
+      this._overlayScheduled = true;
+      // frame() flushes synchronously before onFrame(); this microtask is the
+      // fallback for callers that draw outside the frame loop.
+      queueMicrotask(() => this.flushOverlays());
+    }
+
+    flushOverlays() {
+      if (!this._overlayQ || !this._overlayQ.length) return;
+      const q = this._overlayQ;
+      this._overlayQ = [];
+      this._overlayScheduled = false;
+      this.drawOverlays(q);
+    }
+
+    // World units per CSS pixel: labels stay 12px on screen in 2D and 3D.
+    overlayUnit(m) {
+      const scale = Math.hypot(m.a, m.b) / (this.dpr || 1);
+      return 1 / (scale || 1);
+    }
+
+    overlayPriority(s) {
+      const st = s && s.status;
+      if (st === 'waiting') return 0;
+      if (st === 'error') return 1;
+      if (st === 'thinking' || st === 'tool' || st === 'typing') return 2;
+      return 3;
+    }
+
+    labelText(s) {
+      const text = String(this.label(s) || '').trim();
+      return text || String(s.project || s.agentName || s.agent || '');
+    }
+
+    labelSpec(p, u) {
       const c = this.ctx;
-      const t = this.t / 1000;
+      const text = this.labelText(p.s);
+      const badge = this.showAgent && AGENT_BADGES[p.s.agent];
+      c.font = `600 ${12 * u}px ${SANS}`;
+      const pad = 7 * u, dot = 6 * u, gap = 5 * u;
+      const badgeW = badge ? 12 * u : 0;
+      return {
+        text, badge, pad, dot, gap, badgeW, u,
+        w: pad * 2 + dot + gap + (badgeW ? badgeW + gap : 0) + c.measureText(text).width,
+        h: 20 * u,
+      };
+    }
+
+    bubbleSpec(p, at, u) {
       const s = p.s || {};
       const st = s.status;
-      const pal = this.pal;
-      const x = at.x, y = at.y - 6;
-      c.save();
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      const font = (w, px) => `${w} ${px}px ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Apple Color Emoji", sans-serif`;
-      c.font = font(600, 10);
-
-      const badge = this.showAgent && AGENT_BADGES[s.agent];
-      const pill = (text, fg, bg, yy, alpha = 1, identify = false) => {
-        c.globalAlpha = alpha;
-        let tx = text;
-        while (c.measureText(tx).width > 118 && tx.length > 2) tx = tx.slice(0, -2) + '…';
-        const extra = badge && identify ? 26 : 0;
-        const w = c.measureText(tx).width + 12 + extra;
-        const height = extra ? 22 : 16;
-        this.roundRect(x - w / 2, yy - height / 2, w, height, 8, bg);
-        c.fillStyle = fg;
-        c.fillText(tx, x + extra / 2, yy + 0.5);
-        if (extra) this.agentBadge(badge, x - w / 2 + 13, yy);
-        c.globalAlpha = 1;
-        return yy - 8;
-      };
-
-      let top = y;
+      const col = STATUS_COLOR[st] || '#888';
+      if (st === 'done') return null; // finished people keep a nameplate, no bubble
       if (p.mode === 'work' && !p.path.length) {
-        const col = STATUS_COLOR[st] || '#888';
-        if (st === 'thinking') {
-          c.fillStyle = pal.bubble;
-          c.beginPath(); c.arc(x + 6, y - 2, 2, 0, Math.PI * 2); c.fill();
-          c.beginPath(); c.arc(x + 10, y - 7, 3, 0, Math.PI * 2); c.fill();
-          this.roundRect(x - 2, y - 26, 32, 16, 8, pal.bubble);
-          for (let i = 0; i < 3; i++) {
-            c.fillStyle = col;
-            c.globalAlpha = 0.3 + 0.7 * Math.max(0, Math.sin(t * 5 - i * 0.7));
-            c.beginPath(); c.arc(x + 6 + i * 8, y - 18, 2.4, 0, Math.PI * 2); c.fill();
-          }
-          c.globalAlpha = 1;
-          top = y - 26;
-        } else if (st === 'typing') {
-          this.roundRect(x - 2, y - 24, 34, 16, 5, col);
-          c.beginPath(); c.moveTo(x + 2, y - 9); c.lineTo(x - 2, y - 3); c.lineTo(x + 8, y - 9); c.fillStyle = col; c.fill();
-          const n = Math.floor(t * 4) % 4;
-          c.fillStyle = '#fff';
-          for (let i = 0; i < n; i++) { c.beginPath(); c.arc(x + 7 + i * 8, y - 16, 2, 0, Math.PI * 2); c.fill(); }
-          top = y - 24;
-        } else if (st === 'tool') {
-          const tool = (s.activity || 'tool').split(/[:\s]/)[0];
-          top = pill('⚙ ' + tool, '#fff', col, y - 12);
-        } else if (st === 'waiting' || st === 'error') {
-          const jump = Math.abs(Math.sin(t * 4)) * 4;
-          c.fillStyle = col;
-          c.beginPath(); c.arc(x, y - 12 - jump, 9, 0, Math.PI * 2); c.fill();
-          c.fillStyle = '#fff';
-          c.font = font(800, 12);
-          c.fillText('!', x, y - 11.5 - jump);
-          c.font = font(600, 10);
-          top = y - 22 - jump;
-        }
+        if (st === 'tool') return { kind: 'text', text: clipText(s.activity || 'tool', 24), color: col };
+        if (st === 'thinking') return { kind: 'think', color: col };
+        if (st === 'typing') return { kind: 'type', color: col };
+        if (st === 'waiting' || st === 'error') return { kind: 'alert', color: col };
       } else if (p.mode === 'wander') {
-        const justDone = st === 'done' && Date.now() - (s.lastEventAt || 0) < 3 * 60_000;
         const dozing = at.act === 'nap' || (st === 'idle' && (at.act === 'couch' || at.act === 'beanbag' || (p.poi && p.poi.sleepy)));
-        if (justDone) {
-          c.fillStyle = STATUS_COLOR.done;
-          c.beginPath(); c.arc(x, y - 10, 7, 0, Math.PI * 2); c.fill();
-          c.fillStyle = '#fff'; c.font = font(800, 9); c.fillText('✓', x, y - 9.5); c.font = font(600, 10);
-          top = y - 18;
-        } else if (dozing && !p.path.length) {
-          c.fillStyle = STATUS_COLOR.idle;
-          c.font = font(700, 10);
-          for (let i = 0; i < 3; i++) {
-            const k = (t * 0.6 + i / 3) % 1;
-            c.globalAlpha = 1 - k;
-            c.fillText('z', x + 6 + k * 10, y - 4 - k * 18);
-          }
-          c.globalAlpha = 1;
-          c.font = font(600, 10);
-          top = y - 20;
-        } else if (at.act && (ACT_EMOJI[at.act] || (p.poi && p.poi.emoji)) && !p.path.length) {
-          const cycle = (t + p.phase * 3) % 9;
-          if (cycle < 2.2) {
-            c.globalAlpha = Math.min(1, cycle * 3, (2.2 - cycle) * 3);
-            c.font = font(400, 13);
-            c.fillText((p.poi && p.poi.emoji) || ACT_EMOJI[at.act], x, y - 10);
-            c.globalAlpha = 1;
-            c.font = font(600, 10);
-            top = y - 18;
-          }
+        if (dozing && !p.path.length) return { kind: 'zzz', color: STATUS_COLOR.idle };
+        if (at.act && (ACT_EMOJI[at.act] || (p.poi && p.poi.emoji)) && !p.path.length) {
+          return { kind: 'emoji', text: (p.poi && p.poi.emoji) || ACT_EMOJI[at.act] };
         }
+      }
+      return null;
+    }
+
+    measureBubble(spec, u) {
+      if (spec.kind === 'text') {
+        this.ctx.font = `600 ${11 * u}px ${MONO}`;
+        spec.w = this.ctx.measureText(spec.text).width + 21 * u;
+        spec.h = 18 * u;
+      } else if (spec.kind === 'think') {
+        spec.w = 30 * u; spec.h = 16 * u;
+      } else if (spec.kind === 'type') {
+        spec.w = 32 * u; spec.h = 16 * u;
+      } else if (spec.kind === 'alert') {
+        spec.w = spec.h = 18 * u;
+      } else if (spec.kind === 'emoji') {
+        spec.w = spec.h = 18 * u;
+      } else {
+        spec.w = 16 * u; spec.h = 20 * u;
+      }
+      return spec;
+    }
+
+    rectHits(r, placed, pad) {
+      for (const q of placed) {
+        if (r.x - pad < q.x + q.w + pad && r.x + r.w + pad > q.x - pad &&
+            r.y - pad < q.y + q.h + pad && r.y + r.h + pad > q.y - pad) return true;
+      }
+      return false;
+    }
+
+    // Preferred spot, then up to two one-line shifts up; hidden if still taken.
+    placeLabel(r, placed, u, force) {
+      const pad = 1 * u, line = r.h + 2 * u;
+      for (let k = 0; k <= 2; k++) {
+        const q = { x: r.x, y: r.y - k * line, w: r.w, h: r.h };
+        if (force || !this.rectHits(q, placed, pad)) return q;
+      }
+      return null;
+    }
+
+    placeBubble(r, placed, u) {
+      const pad = 1 * u, line = r.h + 2 * u;
+      for (let k = 0; k <= 2; k++) {
+        const q = { x: r.x, y: r.y - k * line, w: r.w, h: r.h };
+        if (!this.rectHits(q, placed, pad)) return q;
+      }
+      return null;
+    }
+
+    drawOverlays(queue) {
+      if (!queue.length || this.dead) return;
+      const c = this.ctx;
+      const u = this.overlayUnit(queue[0].m);
+      c.save();
+      c.setTransform(queue[0].m);
+
+      const items = queue.map(({ p, at }) => {
+        const item = { p, at, u, pri: this.overlayPriority(p.s), label: this.labelSpec(p, u), bubble: this.bubbleSpec(p, at, u) };
+        if (item.bubble) this.measureBubble(item.bubble, u);
+        return item;
+      });
+      // Hovered label first, then waiting > error > working > everything else.
+      items.sort((a, b) => {
+        const ha = a.p.key === this.hoverKey ? 0 : 1;
+        const hb = b.p.key === this.hoverKey ? 0 : 1;
+        if (ha !== hb) return ha - hb;
+        if (a.pri !== b.pri) return a.pri - b.pri;
+        return String(a.p.key) < String(b.p.key) ? -1 : 1;
+      });
+
+      const placed = [];
+      for (const it of items) {
+        const bubbleH = it.bubble ? it.bubble.h + 2 * u : 0;
+        const gap = it.bubble ? 2 * u : 0;
+        const rect = this.placeLabel({
+          x: it.at.x - it.label.w / 2,
+          y: it.at.y - 6 * u - bubbleH - gap - it.label.h,
+          w: it.label.w, h: it.label.h,
+        }, placed, u, it.p.key === this.hoverKey);
+        if (rect) { it.labelRect = rect; placed.push(rect); }
+      }
+      for (const it of items) {
+        if (!it.bubble) continue;
+        const rect = this.placeBubble({
+          x: it.at.x - it.bubble.w / 2,
+          y: it.at.y - 6 * u - it.bubble.h,
+          w: it.bubble.w, h: it.bubble.h,
+        }, placed, u);
+        if (rect) { it.bubbleRect = rect; placed.push(rect); }
       }
 
-      const hover = this.hoverKey === p.key;
-      if (!s.subagent || hover) {
-        pill(this.label(s), pal.text, pal.tagBg, top - 11, p.mode === 'work' || hover ? 1 : 0.7, true);
-      } else if (badge) {
-        this.agentBadge(badge, x, top - 11);
-      }
+      for (const it of items) if (it.bubbleRect) this.drawBubble(it);
+      for (const it of items) if (it.labelRect && it.p.key !== this.hoverKey) this.drawLabel(it);
+      const hovered = items.find((it) => it.labelRect && it.p.key === this.hoverKey);
+      if (hovered) this.drawLabel(hovered);
       c.restore();
     }
 
-    agentBadge(badge, x, y) {
+    drawLabel(it) {
+      const c = this.ctx;
+      const r = it.labelRect, sp = it.label, s = it.p.s || {}, u = it.u;
+      this.roundRect(r.x, r.y, r.w, r.h, 6 * u, UI.panel, UI.lineStrong, 1 * u);
+      const cy = r.y + r.h / 2;
+      let x = r.x + sp.pad;
+      c.fillStyle = STATUS_COLOR[s.status] || UI.muted;
+      c.beginPath(); c.arc(x + sp.dot / 2, cy, sp.dot / 2, 0, Math.PI * 2); c.fill();
+      x += sp.dot + sp.gap;
+      if (sp.badge) {
+        this.agentBadge(sp.badge, x + sp.badgeW / 2, cy, sp.badgeW);
+        x += sp.badgeW + sp.gap;
+      }
+      c.fillStyle = UI.ink;
+      c.font = `600 ${12 * u}px ${SANS}`;
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.fillText(sp.text, x, cy + 0.5 * u);
+    }
+
+    drawBubble(it) {
+      const c = this.ctx;
+      const r = it.bubbleRect, sp = it.bubble, u = it.u;
+      const cy = r.y + r.h / 2;
+      if (sp.kind === 'text') {
+        this.roundRect(r.x, r.y, r.w, r.h, 5 * u, UI.raised, UI.line, 1 * u);
+        c.fillStyle = sp.color;
+        c.beginPath(); c.arc(r.x + 7 * u, cy, 2.5 * u, 0, Math.PI * 2); c.fill();
+        c.fillStyle = UI.ink;
+        c.font = `600 ${11 * u}px ${MONO}`;
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(sp.text, r.x + 13 * u, cy + 0.5 * u);
+      } else if (sp.kind === 'think') {
+        this.roundRect(r.x, r.y, r.w, r.h, 8 * u, UI.raised, UI.line, 1 * u);
+        for (let i = 0; i < 3; i++) {
+          c.fillStyle = sp.color;
+          c.globalAlpha = 0.3 + 0.7 * Math.max(0, Math.sin(this.t / 200 - i * 0.7));
+          c.beginPath(); c.arc(r.x + 8 * u + i * 7 * u, cy, 2.2 * u, 0, Math.PI * 2); c.fill();
+        }
+        c.globalAlpha = 1;
+      } else if (sp.kind === 'type') {
+        this.roundRect(r.x, r.y, r.w, r.h, 5 * u, sp.color);
+        const n = Math.floor(this.t / 250) % 4;
+        c.fillStyle = '#fff';
+        for (let i = 0; i < n; i++) { c.beginPath(); c.arc(r.x + 8 * u + i * 7 * u, cy, 2 * u, 0, Math.PI * 2); c.fill(); }
+      } else if (sp.kind === 'alert') {
+        const jump = Math.abs(Math.sin(this.t / 250)) * 3 * u;
+        c.fillStyle = sp.color;
+        c.beginPath(); c.arc(r.x + r.w / 2, cy - jump, r.w / 2, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#fff';
+        c.font = `800 ${12 * u}px ${SANS}`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText('!', r.x + r.w / 2, cy - jump + 0.5 * u);
+      } else if (sp.kind === 'emoji') {
+        const cycle = (this.t / 1000 + it.p.phase * 3) % 9;
+        if (cycle < 2.2) {
+          c.globalAlpha = Math.min(1, cycle * 3, (2.2 - cycle) * 3);
+          c.font = `400 ${13 * u}px ${SANS}`;
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          c.fillText(sp.text, r.x + r.w / 2, cy);
+          c.globalAlpha = 1;
+        }
+      } else if (sp.kind === 'zzz') {
+        c.fillStyle = STATUS_COLOR.idle;
+        c.font = `700 ${10 * u}px ${SANS}`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        for (let i = 0; i < 3; i++) {
+          const k = (this.t / 1600 + i / 3) % 1;
+          c.globalAlpha = 1 - k;
+          c.fillText('z', r.x + 8 * u + k * 6 * u, cy + 6 * u - k * 14 * u);
+        }
+        c.globalAlpha = 1;
+      }
+    }
+
+    agentBadge(badge, x, y, size = 18) {
       const c = this.ctx;
       c.save();
       c.globalAlpha = 1;
       if (badge.image.complete && badge.image.naturalWidth > 0) {
-        if (badge.mono && this.pal.dark) c.filter = 'invert(1)';
+        if (badge.mono && UI.dark) c.filter = 'invert(1)';
         c.imageSmoothingEnabled = true;
         c.imageSmoothingQuality = 'high';
-        c.drawImage(badge.image, x - 9, y - 9, 18, 18);
+        c.drawImage(badge.image, x - size / 2, y - size / 2, size, size);
       } else {
-        c.fillStyle = this.pal.text;
-        c.font = '800 10px ui-sans-serif, system-ui, sans-serif';
+        c.fillStyle = badge.color || UI.muted;
+        c.beginPath(); c.arc(x, y, size / 2, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#fff';
+        c.font = `800 ${Math.max(7, size * 0.52)}px ${SANS}`;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.fillText(badge.short, x, y + 0.5);
+        c.fillText(String(badge.short || '').slice(0, 2), x, y + 0.5);
       }
       c.restore();
     }
@@ -1550,7 +1737,11 @@
       this.t = now;
       if (!this.visible) return;
       this.step(dt);
-      if (this.draw() !== false) {
+      const drawn = this.draw();
+      // Nameplates and bubbles are placed after everyone has been drawn; flush
+      // them before the frame is captured for the pop-out preview.
+      this.flushOverlays();
+      if (drawn !== false) {
         if (!this.first && ++this.framesShown === 3) this.markReady(true);
         // Capture immediately: a WebGL drawing buffer may be cleared after
         // this task. The overlay and the 3D canvas must be copied together.
