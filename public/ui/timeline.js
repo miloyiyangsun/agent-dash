@@ -39,6 +39,26 @@
   const statusLabel = (st) => (typeof L !== 'undefined' && L[st]) || STATUS_ZH[st] || st;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+  // Bar durations sit at 6px from the left edge; ticks under that text are
+  // skipped instead of striking through it. Measure once per distinct string.
+  let measureCtx = null;
+  const durWidths = new Map();
+  function durTextWidth(text) {
+    if (!text) return 0;
+    const hit = durWidths.get(text);
+    if (hit != null) return hit;
+    try {
+      measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+      measureCtx.font = '11px "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, monospace';
+      const w = measureCtx.measureText(text).width;
+      durWidths.set(text, w);
+      return w;
+    } catch {
+      return text.length * 6.6;
+    }
+  }
+  const DUR_PAD = 12;
+
   function clip(text, n) {
     const s = String(text || '').trim();
     return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
@@ -221,7 +241,7 @@
 
   // One 1px line per event, merged by pixel: when several events land on the
   // same pixel the most telling one wins (error > final > reply > tool).
-  function ticksSvg(s, start, scale, barW) {
+  function ticksSvg(s, start, scale, barW, skip) {
     const evs = Array.isArray(s.events) ? s.events : null;
     if (!evs || !evs.length) return '';
     const seen = new Map();
@@ -232,6 +252,7 @@
       if (!Number.isFinite(ts) || !EV_CLASS[type]) continue;
       const x = Math.round((ts - start) * scale);
       if (x < 0 || x > barW) continue;
+      if (x < skip) continue;
       const cur = seen.get(x);
       if (cur == null || (EV_PRIO[type] || 0) > (EV_PRIO[cur] || 0)) seen.set(x, type);
     }
@@ -257,7 +278,7 @@
     el.className = 'tl-row';
     el.setAttribute('role', 'button');
     el.tabIndex = -1;
-    el.innerHTML = '<div class="tl-label"><span class="ui-dot st-interrupted"></span><span class="ui-chip tl-tag" hidden></span><span class="tl-title"></span></div><div class="tl-track"><div class="tl-bar"><span class="tl-ticks"></span><span class="tl-dur ui-num"></span></div></div>';
+    el.innerHTML = '<div class="tl-label"><span class="ui-dot st-interrupted"></span><span class="ui-chip tl-tag" hidden></span><span class="tl-note" hidden>（无原文）</span><span class="tl-title"></span></div><div class="tl-track"><div class="tl-bar"><span class="tl-ticks"></span><span class="tl-dur ui-num"></span></div></div>';
     return {
       el,
       key: null,
@@ -265,6 +286,8 @@
       dotCls: '',
       tagEl: el.querySelector('.tl-tag'),
       tag: null,
+      noteEl: el.querySelector('.tl-note'),
+      note: null,
       titleEl: el.querySelector('.tl-title'),
       title: null,
       barEl: el.querySelector('.tl-bar'),
@@ -327,6 +350,12 @@
       entry.tagEl.hidden = !ti.tag;
       entry.tag = ti.tag;
     }
+    const note = ti.fromReply ? '（无原文）' : '';
+    if (entry.note !== note) {
+      entry.noteEl.textContent = note;
+      entry.noteEl.hidden = !note;
+      entry.note = note;
+    }
     if (entry.title !== ti.title) {
       entry.titleEl.textContent = ti.title;
       entry.titleEl.title = ti.title;
@@ -346,7 +375,7 @@
       entry.live = live;
     }
     const dur = WB()?.fmtDur ? WB().fmtDur(geom.en - geom.st) : String(Math.round((geom.en - geom.st) / 1000)) + 's';
-    const showDur = geom.width >= 48;
+    const showDur = geom.width >= durTextWidth(dur) + DUR_PAD;
     if (entry.dur !== dur || entry.showDur !== showDur) {
       entry.durEl.textContent = showDur ? dur : '';
       entry.dur = dur;
@@ -354,9 +383,10 @@
     }
     const evs = Array.isArray(s.events) ? s.events : null;
     const evSig = evs && evs.length ? `${evs.length}:${evs[0][0]}:${evs[evs.length - 1][0]}` : '0';
-    const sig = `${geom.st}|${dom.scale.toFixed(5)}|${Math.ceil(geom.width)}|${evSig}`;
+    const skip = showDur ? Math.ceil(durTextWidth(dur)) + DUR_PAD : 0;
+    const sig = `${geom.st}|${dom.scale.toFixed(5)}|${Math.ceil(geom.width)}|${evSig}|${skip}`;
     if (entry.tickSig !== sig) {
-      entry.ticksEl.innerHTML = ticksSvg(s, geom.st, dom.scale, Math.ceil(geom.width));
+      entry.ticksEl.innerHTML = ticksSvg(s, geom.st, dom.scale, Math.ceil(geom.width), skip);
       entry.tickSig = sig;
     }
     const sel = state.wbSel === s.key;
@@ -652,12 +682,16 @@
       if (!s || !LIVE.has(s.status || '')) continue;
       const geom = barGeom(s, now);
       entry.barEl.style.width = geom.width.toFixed(1) + 'px';
-      if (entry.showDur) {
-        const dur = WB()?.fmtDur ? WB().fmtDur(geom.en - geom.st) : '';
-        if (dur && entry.dur !== dur) {
-          entry.durEl.textContent = dur;
-          entry.dur = dur;
-        }
+      const dur = WB()?.fmtDur ? WB().fmtDur(geom.en - geom.st) : '';
+      const show = !!dur && geom.width >= durTextWidth(dur) + DUR_PAD;
+      if (show !== entry.showDur) {
+        // The bar grew past (or shrank below) the label: redraw ticks too.
+        schedule();
+        continue;
+      }
+      if (show && dur && entry.dur !== dur) {
+        entry.durEl.textContent = dur;
+        entry.dur = dur;
       }
     }
     // The window ends just past "now"; once the marker reaches the edge, slide.

@@ -116,6 +116,19 @@
     return `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`;
   }
 
+  function relAgo(ts, now) {
+    if (!ts) return '';
+    if (typeof ago === 'function') {
+      try { return ago(ts, now); } catch { /* fall through */ }
+    }
+    const s = Math.max(0, Math.round((now - ts) / 1000));
+    if (s < 45) return '现在';
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} 分钟前`;
+    const h = Math.round(m / 60);
+    return h < 24 ? `${h} 小时前` : `${Math.round(h / 24)} 天前`;
+  }
+
   // ---------- light markdown ----------
   // Safety rule: escape the whole text first, then run a tiny grammar over the
   // escaped string. Only our own tags ever reach innerHTML; raw HTML and images
@@ -133,6 +146,34 @@
     s = s.replace(/!\[([^\]]*)\]\([^)\s]*\)/g, '$1');
     s = s.replace(/\[([^\]]+)\]\([^)\s]*\)/g, '$1');
     return s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[Number(i)] || '');
+  }
+
+  // GFM table: a header row, a |---| separator, then data rows. Cells run
+  // through the same inline renderer as everything else.
+  const TABLE_SEP = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/;
+  function tableCells(line) {
+    let s = String(line).trim();
+    if (s.startsWith('|')) s = s.slice(1);
+    if (s.endsWith('|')) s = s.slice(0, -1);
+    return s.split('|').map((c) => c.trim());
+  }
+  function tableAlign(cell) {
+    const c = String(cell).trim();
+    const left = c.startsWith(':');
+    const right = c.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    if (left) return 'left';
+    return '';
+  }
+
+  function renderTable(head, aligns, rows) {
+    const cell = (tag, text, k) =>
+      `<${tag}${aligns[k] ? ` style="text-align:${aligns[k]}"` : ''}>${mdInline(text || '')}</${tag}>`;
+    const body = rows.length
+      ? `<tbody>${rows.map((r) => `<tr>${head.map((_, k) => cell('td', r[k], k)).join('')}</tr>`).join('')}</tbody>`
+      : '';
+    return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${head.map((c, k) => cell('th', c, k)).join('')}</tr></thead>${body}</table></div>`;
   }
 
   function renderMd(src) {
@@ -158,6 +199,20 @@
         continue;
       }
       if (!line.trim()) { flush(); i++; continue; }
+      if (line.includes('|') && i + 1 < lines.length && TABLE_SEP.test(lines[i + 1])) {
+        flush();
+        const head = tableCells(line);
+        const aligns = tableCells(lines[i + 1]).map(tableAlign);
+        let j = i + 2;
+        const rows = [];
+        while (j < lines.length && lines[j].trim() && lines[j].includes('|')) {
+          rows.push(tableCells(lines[j]));
+          j++;
+        }
+        out.push(renderTable(head, aligns, rows));
+        i = j;
+        continue;
+      }
       const h = /^(#{1,4})\s+(.*)$/.exec(line);
       if (h) {
         flush();
@@ -245,7 +300,7 @@
         <div class="dt-sticky">
           <header class="dt-head">
             <div class="dt-head-text">
-              <div class="dt-title-row"><span class="ui-chip dt-tag" hidden></span><h1 class="dt-title"></h1></div>
+              <div class="dt-title-row"><span class="ui-chip dt-tag" hidden></span><span class="dt-orig" hidden>（无原文）</span><h1 class="dt-title"></h1></div>
               <div class="dt-meta"></div>
             </div>
             <div class="dt-head-actions"></div>
@@ -264,6 +319,7 @@
         <div class="dt-content">
           <div class="dt-sum" hidden></div>
           <div class="dt-children" hidden></div>
+          <div class="dt-skel" aria-hidden="true"><i style="width:92%"></i><i style="width:74%"></i><i style="width:86%"></i><i style="width:58%"></i></div>
           <div class="dt-blocks"></div>
           <div class="dt-imgrid" hidden></div>
           <div class="dt-note" hidden></div>
@@ -273,6 +329,7 @@
     S.el = {
       root,
       tag: root.querySelector('.dt-tag'),
+      orig: root.querySelector('.dt-orig'),
       title: root.querySelector('.dt-title'),
       meta: root.querySelector('.dt-meta'),
       actions: root.querySelector('.dt-head-actions'),
@@ -284,6 +341,7 @@
       blocks: root.querySelector('.dt-blocks'),
       imgrid: root.querySelector('.dt-imgrid'),
       note: root.querySelector('.dt-note'),
+      skel: root.querySelector('.dt-skel'),
     };
     S.tab = 'all';
   }
@@ -331,6 +389,7 @@
     const tag = ti.tag || '';
     S.el.tag.hidden = !tag;
     if (S.el.tag.textContent !== tag) S.el.tag.textContent = tag;
+    if (S.el.orig) S.el.orig.hidden = !ti.fromReply;
     const title = ti.title || s.project || s.agent || '';
     if (S.el.title.textContent !== title) S.el.title.textContent = title;
 
@@ -934,7 +993,13 @@
     } catch {
       if (S.key === s.key) showNote(t('noMessages'));
     } finally {
-      if (S.key === s.key) S.busy = false;
+      if (S.key === s.key) {
+        S.busy = false;
+        if (S.el && S.el.skel) {
+          S.el.skel.remove();
+          S.el.skel = null;
+        }
+      }
     }
   }
 
@@ -942,6 +1007,97 @@
     if (!S.el) return;
     S.el.note.hidden = !text;
     S.el.note.textContent = text || '';
+  }
+
+  // ---------- empty state (T8) ----------
+
+  const ES_ACTIVE = new Set(['thinking', 'tool', 'typing']);
+
+  function esMasterTitle(s) {
+    const master = findMaster(s);
+    if (!master) return '—';
+    const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(master) : { title: master.title || '' };
+    return clip(ti.title || master.project || master.agent || '', 24) || '—';
+  }
+
+  function esCard(s, now) {
+    const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { tag: '', title: s.title || '' };
+    const st = s.status || 'idle';
+    const second = window.Workbench?.secondLine ? window.Workbench.secondLine(s, ti) : { text: s.activity || '', mono: true };
+    const need = st === 'waiting' || st === 'error';
+    const color = st === 'waiting' ? '--st-waiting' : '--st-error';
+    const orig = ti.fromReply ? '<span class="wb-es-note">（无原文）</span>' : '';
+    return `<button type="button" class="wb-es-card${need ? ' is-need' : ''}" data-es-key="${esc(s.key)}"${need ? ` style="--es-s:var(${color})"` : ''}>
+      <span class="wb-es-top"><span class="ui-dot ${dotClass(st)}"></span>${ti.tag ? `<span class="ui-chip wb-es-tag">${esc(ti.tag)}</span>` : ''}<span class="wb-es-time ui-num" data-es-dur="${esc(s.key)}">${esc(durText(s, now))}</span></span>
+      <span class="wb-es-name">${orig}${esc(ti.title || s.project || s.agent || '')}</span>
+      <span class="wb-es-act${second.mono ? ' is-mono' : ''}" data-es-act="${esc(s.key)}">${esc(second.text || '')}</span>
+      <span class="wb-es-from">派自 ${esc(esMasterTitle(s))}</span>
+    </button>`;
+  }
+
+  function esRecent(s, now) {
+    const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { title: s.title || '' };
+    const orig = ti.fromReply ? '<span class="wb-es-note">（无原文）</span>' : '';
+    return `<button type="button" class="wb-es-row" data-es-key="${esc(s.key)}">
+      <span class="ui-dot st-done"></span>
+      <span class="wb-es-row-title">${orig}${esc(ti.title || s.project || s.agent || '')}</span>
+      <span class="wb-es-row-meta ui-num"><span data-es-ago="${esc(s.key)}">${esc(relAgo(Number(s.lastEventAt) || 0, now))}</span> · ${esc(durText(s, now))}</span>
+    </button>`;
+  }
+
+  function emptyState(box, now) {
+    const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    const rank = (s) => (s.status === 'waiting' ? 0 : s.status === 'error' ? 1 : ES_ACTIVE.has(s.status) ? 2 : 9);
+    const todo = sessions
+      .filter((s) => rank(s) < 9)
+      .sort((a, b) => rank(a) - rank(b) || (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0))
+      .slice(0, 4);
+    const recent = sessions
+      .filter((s) => s.status === 'done')
+      .sort((a, b) => (Number(b.lastEventAt) || 0) - (Number(a.lastEventAt) || 0))
+      .slice(0, 5);
+    const sig = todo.map((s) => `${s.key}:${s.status}`).join(',') + '|' + recent.map((s) => s.key).join(',');
+    if (box.dataset.esSig === sig && box.querySelector('.wb-es')) {
+      tickEmpty(now);
+      return;
+    }
+    box.dataset.esSig = sig;
+    box.dataset.html = '';
+    if (!todo.length && !recent.length) {
+      box.innerHTML = '<div class="wb-es-quiet"><span class="wb-es-seal" aria-hidden="true"></span><p>现在很安静，还没有任务。</p></div>';
+      return;
+    }
+    const todoHtml = todo.length
+      ? `<section class="wb-es-sec"><h3 class="wb-es-h">进行中 <span class="ui-num">${todo.length}</span></h3><div class="wb-es-grid">${todo.map((s) => esCard(s, now)).join('')}</div></section>`
+      : '';
+    const recentHtml = recent.length
+      ? `<section class="wb-es-sec"><h3 class="wb-es-h">最近完成</h3><div class="wb-es-recent">${recent.map((s) => esRecent(s, now)).join('')}</div></section>`
+      : '';
+    box.innerHTML = `<div class="wb-es">${todoHtml}${recentHtml}</div>`;
+    tickEmpty(now);
+  }
+
+  function tickEmpty(now) {
+    const box = document.getElementById('wbDetail');
+    if (!box || !box.querySelector('.wb-es')) return;
+    const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    const byKey = new Map(sessions.map((s) => [s.key, s]));
+    for (const el of box.querySelectorAll('[data-es-dur]')) {
+      const s = byKey.get(el.dataset.esDur);
+      if (s) el.textContent = durText(s, now);
+    }
+    for (const el of box.querySelectorAll('[data-es-ago]')) {
+      const s = byKey.get(el.dataset.esAgo);
+      if (s && s.lastEventAt) el.textContent = relAgo(Number(s.lastEventAt), now);
+    }
+    for (const el of box.querySelectorAll('[data-es-act]')) {
+      const s = byKey.get(el.dataset.esAct);
+      if (!s) continue;
+      const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { tag: '', title: s.title || '' };
+      const second = window.Workbench?.secondLine ? window.Workbench.secondLine(s, ti) : { text: s.activity || '', mono: true };
+      el.textContent = second.text || '';
+      el.classList.toggle('is-mono', !!second.mono);
+    }
   }
 
   // ---------- entry points ----------
@@ -971,7 +1127,6 @@
       const mid = document.getElementById('wbMid');
       if (mid) mid.scrollTop = 0;
       setTab('all');
-      showNote(t('loadingMsgs'));
     }
     S.session = s;
     renderHead(s, now);
@@ -997,16 +1152,17 @@
     S.el = null;
     hideTip();
     showPill();
-    const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
-    box.innerHTML = html;
-    box.dataset.html = html;
+    emptyState(box, Date.now() - (state.skew || 0));
   }
 
   // ---------- ticking durations ----------
 
   function tick() {
-    if (!S.el || !S.key) return;
     const now = Date.now() - (state.skew || 0);
+    if (!S.el || !S.key) {
+      tickEmpty(now);
+      return;
+    }
     const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     const s = list.find((x) => x.key === S.key) || S.session;
     if (!s) return;
@@ -1026,6 +1182,8 @@
     const box = document.getElementById('wbDetail');
     if (!box) return;
     box.addEventListener('click', (e) => {
+      const pick = e.target.closest('[data-es-key]');
+      if (pick) { window.Workbench?.select?.(pick.dataset.esKey); return; }
       const tabBtn = e.target.closest('.dt-tabs [data-tab]');
       if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
       const dot = e.target.closest('.dt-ev');

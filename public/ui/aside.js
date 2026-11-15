@@ -269,7 +269,7 @@
       S.filesSig = sig;
       S.el.filesCount.textContent = c.loaded ? String(files.length) : '';
       S.el.files.innerHTML = !c.loaded
-        ? '<div class="as-note">读取中…</div>'
+        ? '<div class="as-skel" aria-hidden="true"><i style="width:88%"></i><i style="width:72%"></i><i style="width:81%"></i></div>'
         : files.length
           ? files.map(fileRow).join('')
           : '<div class="as-note">没有改动文件</div>';

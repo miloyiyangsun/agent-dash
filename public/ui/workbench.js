@@ -71,6 +71,38 @@
     return String(text || '').replace(WORKDIR_RE, '');
   }
 
+  // System-generated openings that say nothing about the task: compaction
+  // continuations, local-command caveats, slash-command wrappers, interrupted
+  // markers and bare XML-ish tag lines. Drop them and look at what follows.
+  const SYS_BLOCK_RE = /^\s*<(command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat|system-reminder|user-prompt-submit-hook|bash-input|bash-stdout|bash-stderr)\b[^>]*>[\s\S]*?<\/\1>\s*/i;
+  const TAG_ONLY_LINE_RE = /^\s*<\/?[a-zA-Z][\w:-]*(?:\s[^>]*)?>\s*$/;
+  function stripLeadingNoise(src) {
+    let s = String(src || '').replace(/\r\n?/g, '\n');
+    for (let guard = 0; guard < 24; guard++) {
+      const before = s;
+      s = s.replace(/^\s+/, '');
+      if (/^This session is being continued from a previous conversation\b/i.test(s)) {
+        // The rest is the compaction summary, not a user task. Only a real
+        // request appended after "## My request:" survives.
+        const m = s.match(/##\s*My request:\s*/i);
+        if (!m) return '';
+        s = s.slice(m.index + m[0].length);
+        continue;
+      }
+      s = s.replace(/^Caveat: The messages below[^\n]*(?:\n(?!\s*\n)[^\n]*)*/i, '');
+      s = s.replace(/^\[Request interrupted[^\]]*\]\s*/i, '');
+      s = s.replace(SYS_BLOCK_RE, '');
+      const nl = s.indexOf('\n');
+      const first = nl === -1 ? s : s.slice(0, nl + 1);
+      if (first && TAG_ONLY_LINE_RE.test(first)) {
+        s = s.slice(first.length);
+        continue;
+      }
+      if (s === before) break;
+    }
+    return s.trim();
+  }
+
   function squash(text) {
     return String(text || '').replace(/\s+/g, ' ').trim();
   }
@@ -111,13 +143,20 @@
     let fromReply = false;
 
     const clean = (src) => {
-      const p = stripTask(src);
+      const stripped = stripLeadingNoise(src);
+      const p = stripTask(stripped);
       return {
         tag: isTaskId(p.tag) ? p.tag : '',
-        text: plain(firstSentence(stripWorkdir(p.body || src))),
+        text: plain(firstSentence(stripWorkdir(p.body || stripped))),
       };
     };
-    const noise = (text) => NOISE_TITLES.has(String(text || '').toLowerCase().replace(/[.。]+$/, ''));
+    const noise = (text) => {
+      const t = String(text || '').trim();
+      if (NOISE_TITLES.has(t.toLowerCase().replace(/[.。]+$/, ''))) return true;
+      return /^This session is being continued\b/i.test(t) ||
+        /^Caveat: The messages below\b/i.test(t) ||
+        /^\[Request interrupted\b/i.test(t);
+    };
 
     if (deepseek) {
       const p = clean(prompt);
@@ -274,6 +313,8 @@
 
   const rowCache = new Map();
   const groupCache = new Map();
+  const knownSessionKeys = new Set();
+  let firstTreeRender = true;
   let lastByKey = new Map();
   let lastSelectable = [];
   let lastOpenKeys = new Set();
@@ -387,17 +428,19 @@
     el.type = 'button';
     el.className = 'wb-task';
     el.dataset.key = s.key;
-    el.innerHTML = '<span class="wb-l1"><span class="ui-dot st-interrupted"></span><span class="wb-title-wrap"><span class="ui-chip wb-tag" hidden></span><span class="wb-task-title"></span></span><span class="wb-task-time ui-num"></span></span><span class="wb-l2"></span>';
+    el.innerHTML = '<span class="wb-l1"><span class="ui-dot st-interrupted"></span><span class="wb-title-wrap"><span class="ui-chip wb-tag" hidden></span><span class="wb-note" hidden>（无原文）</span><span class="wb-task-title"></span></span><span class="wb-task-time ui-num"></span></span><span class="wb-l2"></span>';
     return {
       el,
       dot: el.querySelector('.ui-dot'),
       tagEl: el.querySelector('.wb-tag'),
+      noteEl: el.querySelector('.wb-note'),
       titleEl: el.querySelector('.wb-task-title'),
       timeEl: el.querySelector('.wb-task-time'),
       l2El: el.querySelector('.wb-l2'),
       dotCls: '',
       tag: null,
       tagHit: false,
+      note: null,
       titleHtml: null,
       time: null,
       l2: null,
@@ -418,6 +461,12 @@
       entry.tagEl.textContent = ti.tag;
       entry.tagEl.hidden = !ti.tag;
       entry.tag = ti.tag;
+    }
+    const note = ti.fromReply ? '（无原文）' : '';
+    if (entry.note !== note) {
+      entry.noteEl.textContent = note;
+      entry.noteEl.hidden = !note;
+      entry.note = note;
     }
     const needle = query.trim().toLowerCase();
     const tagHit = !!(needle && ti.tag && ti.tag.toLowerCase().includes(needle));
@@ -667,6 +716,16 @@
     );
   }
 
+  // A task that just showed up gets a 1.2s accent wash, so the eye catches it.
+  function flashNew(el) {
+    if (reduced()) return;
+    el.classList.remove('wb-new');
+    void el.offsetWidth;
+    el.classList.add('wb-new');
+    clearTimeout(el._newT);
+    el._newT = setTimeout(() => el.classList.remove('wb-new'), 1300);
+  }
+
   function flip(first) {
     if (!first || typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') return;
     const movedGroups = new Set();
@@ -836,10 +895,12 @@
         const rows = g.kind === 'master' ? g.visibleKids : g.rows;
         const desiredRows = [];
         for (const s of rows) {
+          const fresh = !knownSessionKeys.has(s.key);
           let re = rowCache.get(s.key);
           if (!re) {
             re = makeRow(s);
             rowCache.set(s.key, re);
+            if (fresh && !firstTreeRender && ACTIVE.has(s.status || '')) flashNew(re.el);
           }
           updateRow(re, s, now, getTitle(s), g.kind === 'master');
           desiredRows.push(re.el);
@@ -882,6 +943,8 @@
 
     if (animate && firstRects) flip(firstRects);
 
+    for (const s of sessions) knownSessionKeys.add(s.key);
+    firstTreeRender = false;
     lastFilterSig = filterSig;
     lastViewSig = viewSig;
     renderDetail(now);
@@ -1016,6 +1079,12 @@
   function onKeyDown(e) {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape') {
+      const wbEl = document.getElementById('wb');
+      if (wbEl && wbEl.classList.contains('wb-left-open')) {
+        wbEl.classList.remove('wb-left-open');
+        e.preventDefault();
+        return;
+      }
       if (!query) return;
       if (document.querySelector('details.menu[open]')) return;
       const lb = document.getElementById('lightbox');
@@ -1097,8 +1166,23 @@
 
     document.getElementById('wbRightHide')?.addEventListener('click', () => setRight(false));
     document.getElementById('wbRightShow')?.addEventListener('click', () => setRight(true));
-    document.getElementById('wbLeftTab')?.addEventListener('click', () => document.getElementById('wb')?.classList.add('wb-left-open'));
     document.getElementById('wbLeftClose')?.addEventListener('click', () => document.getElementById('wb')?.classList.remove('wb-left-open'));
+    // Below 900px the tree is a drawer: the top bar's 任务 button opens it,
+    // and a press anywhere outside the drawer closes it.
+    document.getElementById('tbTasks')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('wb')?.classList.toggle('wb-left-open');
+    });
+    document.addEventListener('pointerdown', (e) => {
+      const wbEl = document.getElementById('wb');
+      if (!wbEl || !wbEl.classList.contains('wb-left-open')) return;
+      if (e.target.closest('#wbLeft') || e.target.closest('#tbTasks')) return;
+      wbEl.classList.remove('wb-left-open');
+    }, true);
+    const drawerMQ = matchMedia('(max-width: 900px)');
+    drawerMQ.addEventListener('change', (e) => {
+      if (!e.matches) document.getElementById('wb')?.classList.remove('wb-left-open');
+    });
     const narrow = matchMedia('(max-width: 1200px)');
     const resetRight = () => setRight(!narrow.matches);
     resetRight();
