@@ -316,3 +316,325 @@ html[data-theme="dark"] {
     transition: none !important;
   }
 }
+
+/* ---------- workbench: task tree (T3) ---------- */
+
+/* Site-wide thin scrollbars: 8px thumb, transparent track, both APIs. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.wb-filters {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-2) 10px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.wb-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.wb-filter-row:first-child {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.wb-filter-row:first-child::-webkit-scrollbar {
+  display: none;
+}
+.wb-fchip {
+  gap: 4px;
+  padding: 1px 7px;
+  font-size: var(--fs-11);
+  line-height: 18px;
+  cursor: pointer;
+}
+.wb-fchip .ui-num {
+  color: var(--faint);
+  font-size: var(--fs-11);
+}
+.wb-fchip.is-accent .ui-num {
+  color: var(--accent);
+}
+.wb-fchip:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+.wb-fchip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wb-group {
+  border-radius: var(--r-ctl);
+}
+.wb-group + .wb-group {
+  margin-top: 7px;
+}
+.wb-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px 0 2px;
+  border-left: 2px solid transparent;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+  user-select: none;
+}
+.wb-group-head:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.wb-group-head.on {
+  background: var(--raised);
+  border-left-color: var(--accent);
+}
+.wb-group-head:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.wb-arrow {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.wb-arrow svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .15s ease;
+}
+.wb-group.collapsed .wb-arrow svg {
+  transform: rotate(-90deg);
+}
+.wb-arrow:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.wb-arrow:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+}
+.wb-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-serif);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: var(--lh-list);
+  color: var(--ink);
+}
+.wb-group-count {
+  flex: none;
+  color: var(--faint);
+  font-size: var(--fs-11);
+}
+.wb-bar {
+  flex: none;
+  display: flex;
+  width: 48px;
+  height: 4px;
+  gap: 1px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--line);
+}
+.wb-bar i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+.wb-group-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--faint);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+.wb-section .wb-group-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.wb-section .wb-bar,
+.wb-section .wb-group-time {
+  display: none;
+}
+
+.wb-kids {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.wb-group.collapsed .wb-kids {
+  display: none;
+}
+.wb-task {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  height: 46px;
+  padding: 4px 8px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: var(--r-ctl);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.wb-task:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.wb-task.on {
+  background: var(--raised);
+  border-left-color: var(--accent);
+}
+.wb-task:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.wb-task.wb-child {
+  padding-left: 20px;
+}
+.wb-task.wb-child::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.wb-kids > .wb-task.wb-child:last-child::before {
+  bottom: 50%;
+}
+.wb-l1 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.wb-title-wrap {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.wb-task-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-13);
+  line-height: var(--lh-list);
+}
+.wb-task-time {
+  flex: none;
+  color: var(--faint);
+  font-size: var(--fs-11);
+  line-height: var(--lh-list);
+  text-align: right;
+  white-space: nowrap;
+}
+.wb-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 16px;
+}
+.wb-tag.is-hit {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.wb-l2 {
+  min-width: 0;
+  padding-left: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+  font-size: var(--fs-12);
+  line-height: var(--lh-list);
+}
+.wb-l2.wb-act {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+.wb-l2.wb-wait {
+  color: var(--st-waiting);
+}
+.wb-l2.wb-err {
+  color: var(--st-error);
+}
+.wb-task-title mark,
+.wb-group-title mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+.wb-empty-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-height: 180px;
+  padding: var(--sp-6) var(--sp-4);
+  color: var(--muted);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+.wb-empty-list p {
+  margin: 0;
+}
