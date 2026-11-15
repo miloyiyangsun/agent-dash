@@ -255,6 +255,7 @@ header#topbar.tb-hide-counts .tb-counts { display: none; }
 }
 .tb-count:hover { background: var(--raised); color: var(--ink); }
 .tb-count b { color: var(--ink); font-weight: 600; }
+.tb-count[hidden], .tb-dot-sep[hidden] { display: none; }
 .tb-dot-sep { color: var(--faint); }
 .view-seg { position: relative; }
 .view-seg > button { position: relative; z-index: 1; }

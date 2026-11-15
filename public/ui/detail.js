@@ -1,0 +1,977 @@
+// detail.js — workbench middle column: task detail (T4a).
+// Owns the sticky header, event strip, tabs, transcript blocks, final-answer
+// summary, a master's child table, and incremental refresh with scroll-follow.
+// Everything here reads the same session objects the left tree already has.
+(() => {
+  'use strict';
+
+  const esc = (s) => (typeof window.esc === 'function'
+    ? window.esc(s)
+    : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+  const t = (k) => (typeof L !== 'undefined' && L[k] != null ? L[k] : (window.I18N?.en?.[k] ?? k));
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
+
+  const EV = {
+    prompt: '--ev-prompt',
+    think: '--ev-think',
+    tool: '--ev-tool',
+    say: '--ev-say',
+    final: '--ev-final',
+    error: '--ev-error',
+  };
+
+  const COPY_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>';
+  const FOLDER_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5l2 2.5h8A1.5 1.5 0 0 1 21 9v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"/></svg>';
+
+  const S = {
+    key: null,
+    session: null,
+    messages: [],
+    at: null,
+    loaded: false,
+    busy: false,
+    private: false,
+    tab: 'all',
+    blocks: [],
+    dots: [],
+    finalIdx: -1,
+    nearBottom: true,
+    newCount: 0,
+    firstLoad: true,
+    raf: 0,
+    el: null,
+  };
+
+  let tipEl = null;
+  let pillEl = null;
+  let toastEl = null;
+  let toastTimer = 0;
+
+  // ---------- formatting ----------
+
+  function fmtDur(ms) {
+    if (typeof dur === 'function') {
+      try { return dur(ms); } catch { /* fall through */ }
+    }
+    const s = Math.max(0, Math.floor(ms / 1000));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+  }
+
+  function startOf(s) {
+    const a = Number(s.startedAt) || 0;
+    const b = Number(s.turnStartedAt) || 0;
+    if (a && b) return Math.min(a, b);
+    return a || b;
+  }
+
+  function durText(s, now) {
+    const start = startOf(s);
+    if (!start) return '—';
+    const live = LIVE.has(s.status);
+    let end = live ? now : (Number(s.lastEventAt) || Number(s.turnStartedAt) || now);
+    if (end < start) end = start;
+    return fmtDur(end - start);
+  }
+
+  function clip(text, n) {
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
+  }
+
+  function agentLabel(a) {
+    return (typeof AGENT_NAME !== 'undefined' && AGENT_NAME[a]) || a;
+  }
+
+  function dotClass(st) {
+    return st === 'idle' ? 'st-interrupted' : `st-${st || 'interrupted'}`;
+  }
+
+  function statusColor(st) {
+    if (typeof window.statusColor === 'function') {
+      try { return window.statusColor(st); } catch { /* fall through */ }
+    }
+    return `var(--st-${st || 'interrupted'})`;
+  }
+
+  function hhmm(ms) {
+    if (typeof window.hhmm === 'function') {
+      try { return window.hhmm(ms); } catch { /* fall through */ }
+    }
+    if (!ms) return '';
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function hhmmss(ms) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+  }
+
+  function shotUrl(key, im) {
+    return `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`;
+  }
+
+  // ---------- message classification ----------
+
+  function kindOf(m) {
+    if (m.role === 'user') return 'prompt';
+    if (m.role === 'thinking') return 'think';
+    if (m.role === 'tool') return 'tool';
+    if (m.role === 'final') return 'final';
+    return 'say';
+  }
+
+  function evOf(m) {
+    if (m.role === 'final' && m.isError) return 'error';
+    return kindOf(m);
+  }
+
+  function typeLabel(m, isChild) {
+    if (m.role === 'user') return isChild ? '委派' : '提问';
+    if (m.role === 'thinking') return '思考';
+    if (m.role === 'tool') return '工具调用';
+    if (m.role === 'final') return m.isError ? '最终错误' : '最终答复';
+    return '回复';
+  }
+
+  // Claude transcripts only carry a one-line description ("Bash: …"), so the
+  // tool name is the leading word; deepseek messages already have m.name.
+  function toolNameOf(m) {
+    if (m.name) return m.name;
+    const mm = /^([A-Za-z][\w.-]*)(?::\s|\s|$)/.exec(String(m.text || ''));
+    return mm ? mm[1] : '';
+  }
+
+  function sigOf(m) {
+    const text = typeof m.text === 'string' ? m.text : '';
+    const res = m.result && typeof m.result.text === 'string' ? m.result.text : '';
+    const imgs = Array.isArray(m.images) ? m.images.map((x) => `${x.start}:${x.len}`).join(',') : '';
+    return [m.role, m.kind || '', m.at || 0, m.name || '', text.length, text.slice(0, 48), res.length, res.slice(0, 24), imgs].join('|');
+  }
+
+  // ---------- skeleton ----------
+
+  function skeleton(box) {
+    box.innerHTML = `
+      <div class="dt" data-tab="all">
+        <div class="dt-sticky">
+          <header class="dt-head">
+            <div class="dt-head-text">
+              <div class="dt-title-row"><span class="ui-chip dt-tag" hidden></span><h1 class="dt-title"></h1></div>
+              <div class="dt-meta"></div>
+            </div>
+            <div class="dt-head-actions"></div>
+          </header>
+          <div class="dt-strip"><div class="dt-strip-inner"></div></div>
+          <div class="dt-tabs-row">
+            <div class="ui-seg dt-tabs" role="group">
+              <button type="button" data-tab="all" aria-pressed="true">全程 <b class="ui-num"></b></button>
+              <button type="button" data-tab="tools" aria-pressed="false">工具 <b class="ui-num"></b></button>
+              <button type="button" data-tab="replies" aria-pressed="false">回复 <b class="ui-num"></b></button>
+              <button type="button" data-tab="images" aria-pressed="false">图片 <b class="ui-num"></b></button>
+            </div>
+            <span class="dt-live-note"></span>
+          </div>
+        </div>
+        <div class="dt-content">
+          <div class="dt-sum" hidden></div>
+          <div class="dt-children" hidden></div>
+          <div class="dt-blocks"></div>
+          <div class="dt-imgrid" hidden></div>
+          <div class="dt-note" hidden></div>
+        </div>
+      </div>`;
+    const root = box.querySelector('.dt');
+    S.el = {
+      root,
+      tag: root.querySelector('.dt-tag'),
+      title: root.querySelector('.dt-title'),
+      meta: root.querySelector('.dt-meta'),
+      actions: root.querySelector('.dt-head-actions'),
+      strip: root.querySelector('.dt-strip-inner'),
+      tabs: root.querySelector('.dt-tabs'),
+      liveNote: root.querySelector('.dt-live-note'),
+      sum: root.querySelector('.dt-sum'),
+      children: root.querySelector('.dt-children'),
+      blocks: root.querySelector('.dt-blocks'),
+      imgrid: root.querySelector('.dt-imgrid'),
+      note: root.querySelector('.dt-note'),
+    };
+    S.tab = 'all';
+  }
+
+  // ---------- header ----------
+
+  function findMaster(s) {
+    if (!s.parentId) return null;
+    const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    return list.find((x) => x.key !== s.key && (x.id === s.parentId || (x.sessionId && x.sessionId === s.parentId))) || null;
+  }
+
+  function masterTitle(master) {
+    const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(master) : { tag: '', title: master.title || '' };
+    const text = [ti.tag, ti.title].filter(Boolean).join(' · ') || master.project || master.agent || '';
+    return clip(text, 30);
+  }
+
+  function metaHtml(s, master) {
+    const st = s.status || 'idle';
+    const items = [];
+    items.push(`<span class="dt-m"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`);
+    if (s.agent) items.push(`<span class="dt-m"><i>agent</i><span>${esc(agentLabel(s.agent))}</span></span>`);
+    if (master) items.push(`<span class="dt-m"><i>派自</i><button type="button" class="dt-link" data-master-key="${esc(master.key)}">${esc(masterTitle(master))}</button></span>`);
+    if (startOf(s)) {
+      items.push(`<span class="dt-m"><i>开始</i><span class="ui-num">${hhmm(startOf(s))}</span></span>`);
+      items.push('<span class="dt-m"><i>用时</i><span class="ui-num dt-dur"></span></span>');
+    }
+    if (s.effort) items.push(`<span class="dt-m"><i>档位</i><span>${esc(s.effort)}</span></span>`);
+    if (s.turns) items.push(`<span class="dt-m"><i>轮数</i><span class="ui-num">${s.turns}</span></span>`);
+    // The run summary only counts images seen in its 1 MB tail; the transcript
+    // window is what the image tab can actually show, so prefer that once loaded.
+    const transcriptImages = S.messages.reduce((n, m) => n + (Array.isArray(m.images) ? m.images.length : 0), 0);
+    const images = S.loaded ? transcriptImages : (Number(s.images) || 0);
+    if (images) items.push(`<span class="dt-m"><i>图片</i><span class="ui-num">${images}</span></span>`);
+    if (s.model) items.push(`<span class="dt-m"><i>模型</i><span class="dt-mono">${esc(s.model)}</span></span>`);
+    return items.join('');
+  }
+
+  function hasFinal() {
+    return S.messages.some((m) => m.role === 'final');
+  }
+
+  function renderHead(s, now) {
+    if (!S.el) return;
+    const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { tag: '', title: s.title || '' };
+    const tag = ti.tag || '';
+    S.el.tag.hidden = !tag;
+    if (S.el.tag.textContent !== tag) S.el.tag.textContent = tag;
+    const title = ti.title || s.project || s.agent || '';
+    if (S.el.title.textContent !== title) S.el.title.textContent = title;
+
+    const master = findMaster(s);
+    const html = metaHtml(s, master);
+    if (S.el.meta.dataset.sig !== html) {
+      S.el.meta.innerHTML = html;
+      S.el.meta.dataset.sig = html;
+    }
+    const d = S.el.meta.querySelector('.dt-dur');
+    if (d) d.textContent = durText(s, now);
+
+    const resume = typeof window.resumeCmd === 'function' ? window.resumeCmd(s) : '';
+    const acts = [];
+    if (hasFinal()) acts.push('<button type="button" class="ui-btn dt-jump" data-jump-final>跳到最终答复</button>');
+    if (resume) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-resume="${esc(resume)}" title="复制续接命令" aria-label="复制续接命令">${COPY_ICON}</button>`);
+    if (s.cwd) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-cwd="${esc(s.cwd)}" title="复制工作目录" aria-label="复制工作目录">${FOLDER_ICON}</button>`);
+    const asig = acts.join('');
+    if (S.el.actions.dataset.sig !== asig) {
+      S.el.actions.innerHTML = asig;
+      S.el.actions.dataset.sig = asig;
+    }
+  }
+
+  // ---------- a master's children ----------
+
+  function childDur(k, now) {
+    const start = startOf(k);
+    if (!start) return '—';
+    const live = LIVE.has(k.status);
+    let end = live ? now : (Number(k.lastEventAt) || now);
+    if (end < start) end = start;
+    return fmtDur(end - start);
+  }
+
+  function renderChildren(s) {
+    if (!S.el) return;
+    const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    const kids = list
+      .filter((x) => x.key !== s.key && x.parentId && (x.parentId === s.id || (s.sessionId && x.parentId === s.sessionId)))
+      .sort((a, b) => (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0));
+    const sig = kids.map((k) => `${k.key}|${k.status}|${k.title}|${k.lastEventAt || 0}`).join(';');
+    if (S.el.children.dataset.sig !== sig) {
+      S.el.children.dataset.sig = sig;
+      S.el.children.hidden = !kids.length;
+      if (kids.length) {
+        S.el.children.innerHTML = `<div class="dt-children-head">派出的子任务 · <span class="ui-num">${kids.length}</span></div>` + kids.map((k) => {
+          const kt = window.Workbench?.titleOf ? window.Workbench.titleOf(k) : { tag: '', title: k.title || '' };
+          return `<button type="button" class="dt-child" data-child-key="${esc(k.key)}">
+            <span class="ui-dot ${dotClass(k.status)}"></span>
+            ${kt.tag ? `<span class="ui-chip dt-child-tag">${esc(kt.tag)}</span>` : ''}
+            <span class="dt-child-title">${esc(kt.title || k.project || k.agent || '')}</span>
+            <span class="dt-child-dur ui-num"></span>
+          </button>`;
+        }).join('');
+      } else {
+        S.el.children.innerHTML = '';
+      }
+    }
+    const now = Date.now() - (state.skew || 0);
+    for (const el of S.el.children.querySelectorAll('.dt-child[data-child-key]')) {
+      const k = list.find((x) => x.key === el.dataset.childKey);
+      const d = el.querySelector('.dt-child-dur');
+      if (k && d) d.textContent = childDur(k, now);
+    }
+  }
+
+  // ---------- transcript blocks ----------
+
+  function foldHtml(text, lines, cls) {
+    const src = String(text || '');
+    const long = src.length > lines * 96 || src.split('\n').length > lines;
+    const inner = `<div class="${cls} dt-clamp c${lines}">${esc(src)}</div>`;
+    return long ? `<details class="dt-fold"><summary>${inner}</summary></details>` : `<div class="${cls}">${esc(src)}</div>`;
+  }
+
+  function shotGrid(images, name, key, cls) {
+    if (!Array.isArray(images) || !images.length) return '';
+    return `<div class="dt-shots${cls ? ' ' + cls : ''}">${images.map((im, i) => {
+      const url = shotUrl(key, im);
+      const cap = `${name || '工具'} · 图 ${i + 1}`;
+      return `<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="点开看大图"><img loading="lazy" src="${esc(url)}" alt=""></button>`;
+    }).join('')}</div>`;
+  }
+
+  function buildBlock(m, idx, s) {
+    const isChild = !!s && s.agent === 'deepseek';
+    const kind = kindOf(m);
+    const ev = evOf(m);
+    const el = document.createElement('section');
+    el.className = 'dt-blk';
+    el.dataset.kind = kind;
+    el.dataset.ev = ev;
+    el.dataset.idx = String(idx);
+    el.style.setProperty('--ev', `var(${EV[ev] || '--ev-tool'})`);
+
+    const head = document.createElement('div');
+    head.className = 'dt-blk-head';
+    head.innerHTML = '<span class="dt-blk-type"></span><span class="dt-blk-name" hidden></span><span class="dt-blk-time ui-num"></span>';
+    head.querySelector('.dt-blk-type').textContent = typeLabel(m, isChild);
+    const nameEl = head.querySelector('.dt-blk-name');
+    if (m.role === 'tool') {
+      const name = toolNameOf(m);
+      nameEl.hidden = !name;
+      nameEl.textContent = name;
+    }
+    head.querySelector('.dt-blk-time').textContent = m.at ? hhmmss(m.at) : '';
+    el.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'dt-blk-body';
+    const text = String(m.text || '');
+    if (kind === 'prompt') {
+      body.innerHTML = `<div class="dt-prompt">${foldHtml(text, 6, 'dt-body-text')}</div>`;
+    } else if (kind === 'think') {
+      body.innerHTML = foldHtml(text, 3, 'dt-think-text');
+    } else if (kind === 'tool') {
+      let html = '';
+      if (text) {
+        const argLines = text.split('\n').length;
+        const pre = `<pre class="dt-args">${esc(text)}</pre>`;
+        html += argLines > 8 || text.length > 8 * 96
+          ? `<details class="dt-argfold"><summary>参数 · ${argLines} 行</summary>${pre}</details>`
+          : pre;
+      }
+      const resultText = m.result && typeof m.result.text === 'string' ? m.result.text : '';
+      const images = Array.isArray(m.images) ? m.images : [];
+      if (resultText || images.length) {
+        const resLines = resultText ? resultText.split('\n').length : 0;
+        const title = resultText ? `结果 · ${resLines} 行` : `结果 · 图片 ${images.length}`;
+        html += `<details class="dt-result"><summary>${esc(title)}</summary>${resultText ? `<pre class="dt-result-pre">${esc(resultText)}</pre>` : ''}${shotGrid(images, m.name, s.key)}</details>`;
+      }
+      if (!html) html = '<div class="dt-note-inline">没有参数或结果</div>';
+      body.innerHTML = html;
+    } else if (kind === 'final') {
+      body.innerHTML = `<div class="dt-final${m.isError ? ' is-error' : ''}"><div class="dt-final-text">${esc(text)}</div></div>`;
+    } else {
+      body.innerHTML = `<div class="dt-say">${esc(text)}</div>`;
+    }
+    el.appendChild(body);
+    return el;
+  }
+
+  function rebuildBlocks(list) {
+    if (!S.el) return;
+    S.el.blocks.textContent = '';
+    S.blocks = list.map((m, i) => {
+      const el = buildBlock(m, i, S.session);
+      S.el.blocks.appendChild(el);
+      return el;
+    });
+  }
+
+  // ---------- summary card ----------
+
+  function renderSummary() {
+    if (!S.el) return;
+    const fi = S.messages.findIndex((m) => m.role === 'final');
+    S.finalIdx = fi;
+    const s = S.session;
+    const live = s && LIVE.has(s.status);
+    const show = fi >= 0 && !live;
+    S.el.sum.hidden = !show;
+    if (!show) return;
+    const m = S.messages[fi];
+    const text = String(m.text || '');
+    const sig = `${text.length}|${text.slice(0, 64)}|${!!m.isError}`;
+    if (S.el.sum.dataset.sig === sig) return;
+    S.el.sum.dataset.sig = sig;
+    S.el.sum.classList.toggle('is-error', !!m.isError);
+    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? '最终错误' : '最终答复'}</span><button type="button" class="dt-link" data-jump-final>跳到全文</button></div><div class="dt-sum-text">${esc(text)}</div>`;
+  }
+
+  // ---------- tabs, counts, images ----------
+
+  function updateCounts() {
+    if (!S.el) return;
+    const tools = S.messages.filter((m) => m.role === 'tool').length;
+    const replies = S.messages.filter((m) => m.role === 'assistant' || m.role === 'final').length;
+    const images = S.messages.reduce((n, m) => n + (Array.isArray(m.images) ? m.images.length : 0), 0);
+    const vals = { all: S.messages.length, tools, replies, images };
+    for (const b of S.el.tabs.querySelectorAll('[data-tab]')) {
+      const n = b.querySelector('.ui-num');
+      if (n) n.textContent = String(vals[b.dataset.tab] ?? 0);
+    }
+  }
+
+  function rebuildImageGrid() {
+    if (!S.el) return;
+    const key = S.session ? S.session.key : '';
+    const items = [];
+    for (const m of S.messages) {
+      if (!Array.isArray(m.images) || !m.images.length) continue;
+      for (let i = 0; i < m.images.length; i++) {
+        const url = shotUrl(key, m.images[i]);
+        const cap = `${m.name || '工具'} · 图 ${i + 1}`;
+        items.push(`<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="点开看大图"><img loading="lazy" src="${esc(url)}" alt=""></button>`);
+      }
+    }
+    S.el.imgrid.hidden = S.tab !== 'images';
+    const html = items.join('');
+    if (S.el.imgrid.dataset.sig !== html) {
+      S.el.imgrid.dataset.sig = html;
+      S.el.imgrid.innerHTML = items.length ? html : '<div class="dt-note-inline">这次任务没有图片</div>';
+    }
+  }
+
+  function setTab(tab) {
+    if (!S.el) return;
+    S.tab = tab;
+    S.el.root.dataset.tab = tab;
+    for (const b of S.el.tabs.querySelectorAll('[data-tab]')) {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+    if (tab === 'images') rebuildImageGrid();
+    updateVisibleDots();
+  }
+
+  // ---------- event strip ----------
+
+  function buildStrip() {
+    if (!S.el) return;
+    const inner = S.el.strip;
+    const n = S.messages.length;
+    const width = inner.clientWidth || 800;
+    let gap = n > 110 ? 0 : n > 80 ? 1 : n > 50 ? 2 : 4;
+    let size = 6;
+    // Gap bottoms out at 0; a very dense run shrinks the dots as well so every
+    // message keeps a visible mark instead of losing the tail off the edge.
+    if (n && n * size + (n - 1) * gap > width) {
+      gap = 0;
+      size = Math.max(2, Math.min(6, Math.floor(width / n)));
+    }
+    inner.style.gap = `${gap}px`;
+    inner.style.setProperty('--dot-size', `${size}px`);
+    const frag = document.createDocumentFragment();
+    S.dots = [];
+    S.messages.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'dt-ev';
+      b.dataset.idx = String(i);
+      b.style.setProperty('--ev', `var(${EV[evOf(m)] || '--ev-tool'})`);
+      b.setAttribute('aria-label', `${typeLabel(m, S.session && S.session.agent === 'deepseek')}${m.at ? ' ' + hhmm(m.at) : ''}`);
+      frag.appendChild(b);
+      S.dots.push(b);
+    });
+    inner.replaceChildren(frag);
+    updateVisibleDots();
+  }
+
+  // ---------- message sync ----------
+
+  function afterSync(wasNear, added, appended) {
+    updateCounts();
+    buildStrip();
+    renderSummary();
+    rebuildImageGrid();
+    renderHead(S.session, Date.now() - (state.skew || 0));
+    updateLiveNote();
+
+    const mid = document.getElementById('wbMid');
+    if (!mid) return;
+    if (S.firstLoad) {
+      S.firstLoad = false;
+      const live = S.session && LIVE.has(S.session.status);
+      requestAnimationFrame(() => {
+        if (!S.el) return;
+        mid.scrollTop = live ? mid.scrollHeight : 0;
+        S.nearBottom = nearBottom();
+        updateVisibleDots();
+        updateLiveNote();
+      });
+      return;
+    }
+    if (appended && added > 0) {
+      const live = S.session && LIVE.has(S.session.status);
+      if (live && wasNear) {
+        requestAnimationFrame(() => {
+          if (!S.el) return;
+          mid.scrollTop = mid.scrollHeight;
+          S.nearBottom = true;
+          updateVisibleDots();
+          updateLiveNote();
+        });
+      } else if (!wasNear) {
+        S.newCount += added;
+        showPill();
+      }
+    }
+  }
+
+  function syncMessages(list) {
+    const old = S.messages;
+    const oldSigs = old.map(sigOf);
+    const newSigs = list.map(sigOf);
+    const same = oldSigs.length === newSigs.length && oldSigs.every((x, i) => x === newSigs[i]);
+    if (same) {
+      S.messages = list;
+      updateCounts();
+      renderSummary();
+      rebuildImageGrid();
+      return;
+    }
+    if (!S.el) {
+      S.messages = list;
+      return;
+    }
+    const wasNear = nearBottom();
+    let k = -1;
+    if (oldSigs.length && newSigs.length) {
+      for (let i = 0; i < oldSigs.length; i++) {
+        if (oldSigs[i] === newSigs[0]) { k = i; break; }
+      }
+    }
+    let kept = false;
+    if (k >= 0) {
+      const keep = oldSigs.length - k;
+      if (newSigs.length >= keep) {
+        kept = true;
+        for (let i = 0; i < keep; i++) {
+          if (oldSigs[k + i] !== newSigs[i]) { kept = false; break; }
+        }
+      }
+    }
+
+    if (kept && k > 0) {
+      // The log window slid: drop the blocks that fell off the front, then
+      // append. Compensate scroll when the reader is not at the bottom.
+      const mid = document.getElementById('wbMid');
+      const before = mid ? mid.scrollHeight : 0;
+      for (let i = 0; i < k; i++) {
+        const el = S.blocks[i];
+        if (el) el.remove();
+      }
+      S.blocks.splice(0, k);
+      for (let i = 0; i < S.blocks.length; i++) S.blocks[i].dataset.idx = String(i);
+      if (mid && !wasNear) {
+        const after = mid.scrollHeight;
+        mid.scrollTop = Math.max(0, mid.scrollTop - (before - after));
+      }
+      const appendFrom = oldSigs.length - k;
+      for (let i = appendFrom; i < list.length; i++) {
+        const el = buildBlock(list[i], i, S.session);
+        S.el.blocks.appendChild(el);
+        S.blocks.push(el);
+      }
+      const added = list.length - appendFrom;
+      S.messages = list;
+      afterSync(wasNear, added, true);
+      return;
+    }
+
+    if (kept && k === 0 && newSigs.length >= oldSigs.length) {
+      for (let i = oldSigs.length; i < list.length; i++) {
+        const el = buildBlock(list[i], i, S.session);
+        S.el.blocks.appendChild(el);
+        S.blocks.push(el);
+      }
+      const added = list.length - oldSigs.length;
+      S.messages = list;
+      afterSync(wasNear, added, true);
+      return;
+    }
+
+    if (newSigs.length === oldSigs.length) {
+      // Same positions, some messages grew (a tool result landed). Replace only
+      // those blocks so the rest of the DOM and the scroll position stay put.
+      const mid = document.getElementById('wbMid');
+      const viewTop = mid ? mid.getBoundingClientRect().top : 0;
+      for (let i = 0; i < list.length; i++) {
+        if (oldSigs[i] === newSigs[i]) continue;
+        const oldEl = S.blocks[i];
+        if (!oldEl) continue;
+        const above = oldEl.getBoundingClientRect().top < viewTop;
+        const hBefore = oldEl.offsetHeight;
+        const next = buildBlock(list[i], i, S.session);
+        oldEl.replaceWith(next);
+        S.blocks[i] = next;
+        if (above && mid) mid.scrollTop += next.offsetHeight - hBefore;
+      }
+      S.messages = list;
+      afterSync(wasNear, 0, false);
+      return;
+    }
+
+    rebuildBlocks(list);
+    S.messages = list;
+    afterSync(wasNear, 0, false);
+  }
+
+  // ---------- scroll, follow and overlays ----------
+
+  function midRect() {
+    const mid = document.getElementById('wbMid');
+    return mid ? mid.getBoundingClientRect() : null;
+  }
+
+  function nearBottom() {
+    const mid = document.getElementById('wbMid');
+    if (!mid) return true;
+    return mid.scrollHeight - mid.scrollTop - mid.clientHeight < 80;
+  }
+
+  function updateVisibleDots() {
+    const r = midRect();
+    if (!r || !S.dots.length) return;
+    const top = r.top + 118;
+    const bottom = r.bottom;
+    for (let i = 0; i < S.dots.length; i++) {
+      const el = S.blocks[i];
+      if (!el || el.offsetParent === null) {
+        S.dots[i].classList.remove('is-vis');
+        continue;
+      }
+      const br = el.getBoundingClientRect();
+      S.dots[i].classList.toggle('is-vis', br.bottom > top && br.top < bottom);
+    }
+  }
+
+  function updateLiveNote() {
+    if (!S.el) return;
+    const live = S.session && LIVE.has(S.session.status);
+    S.el.liveNote.textContent = live ? (S.nearBottom ? '进行中 · 自动跟随' : '进行中 · 已暂停跟随') : '';
+  }
+
+  function ensurePill() {
+    if (pillEl) return pillEl;
+    pillEl = document.createElement('button');
+    pillEl.type = 'button';
+    pillEl.className = 'dt-new';
+    pillEl.hidden = true;
+    pillEl.addEventListener('click', () => {
+      const mid = document.getElementById('wbMid');
+      if (mid) {
+        try { mid.scrollTo({ top: mid.scrollHeight, behavior: 'smooth' }); } catch { mid.scrollTop = mid.scrollHeight; }
+      }
+      S.newCount = 0;
+      showPill();
+    });
+    document.body.appendChild(pillEl);
+    return pillEl;
+  }
+
+  function positionPill() {
+    const b = ensurePill();
+    const r = midRect();
+    if (!r) { b.hidden = true; return; }
+    b.style.left = `${r.left + r.width / 2}px`;
+    b.style.top = `${r.bottom - 48}px`;
+  }
+
+  function showPill() {
+    const b = ensurePill();
+    b.hidden = !S.newCount;
+    if (S.newCount) b.textContent = `↓ ${S.newCount} 条新消息`;
+    positionPill();
+  }
+
+  function ensureToast() {
+    if (toastEl) return toastEl;
+    toastEl = document.createElement('div');
+    toastEl.className = 'dt-toast';
+    document.body.appendChild(toastEl);
+    return toastEl;
+  }
+
+  function positionToast() {
+    if (!toastEl || !toastEl.classList.contains('on')) return;
+    const r = midRect();
+    if (!r) return;
+    toastEl.style.left = `${r.left + r.width / 2}px`;
+    toastEl.style.top = `${r.bottom - 56}px`;
+  }
+
+  function toast(text) {
+    const el = ensureToast();
+    el.textContent = text;
+    el.classList.add('on');
+    positionToast();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), 1500);
+  }
+
+  async function copyText(text) {
+    if (!text) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      ta.remove();
+    }
+    toast(ok ? '已复制' : '复制失败');
+  }
+
+  function onScroll() {
+    if (S.raf) return;
+    S.raf = requestAnimationFrame(() => {
+      S.raf = 0;
+      const nb = nearBottom();
+      const changed = nb !== S.nearBottom;
+      S.nearBottom = nb;
+      if (nb && S.newCount) {
+        S.newCount = 0;
+        showPill();
+      }
+      if (changed) updateLiveNote();
+      updateVisibleDots();
+      positionPill();
+      positionToast();
+    });
+  }
+
+  // ---------- event strip tooltip ----------
+
+  function ensureTip() {
+    if (tipEl) return tipEl;
+    tipEl = document.createElement('div');
+    tipEl.className = 'dt-ev-tip';
+    tipEl.hidden = true;
+    document.body.appendChild(tipEl);
+    return tipEl;
+  }
+
+  function showTip(dot) {
+    const i = Number(dot.dataset.idx);
+    const m = S.messages[i];
+    if (!m) return;
+    const el = ensureTip();
+    const label = typeLabel(m, S.session && S.session.agent === 'deepseek') + (m.role === 'tool' && m.name ? ` · ${m.name}` : '');
+    const at = m.at ? hhmmss(m.at) : '';
+    const body = clip(m.text || (m.result && m.result.text) || '', 60);
+    el.textContent = [label, at, body].filter(Boolean).join(' · ');
+    const r = dot.getBoundingClientRect();
+    el.style.left = `${r.left + r.width / 2}px`;
+    el.style.top = `${r.top - 6}px`;
+    el.hidden = false;
+  }
+
+  function hideTip() {
+    if (tipEl) tipEl.hidden = true;
+  }
+
+  // ---------- jumping ----------
+
+  function jumpToBlock(idx) {
+    if (!S.el) return;
+    if (S.tab !== 'all') setTab('all');
+    requestAnimationFrame(() => {
+      const el = S.blocks[idx];
+      if (!el) return;
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { el.scrollIntoView(); }
+      el.classList.remove('is-flash');
+      void el.offsetWidth;
+      el.classList.add('is-flash');
+      clearTimeout(el._flashT);
+      el._flashT = setTimeout(() => el.classList.remove('is-flash'), 950);
+    });
+  }
+
+  function jumpToFinal() {
+    if (S.finalIdx < 0) return;
+    jumpToBlock(S.finalIdx);
+  }
+
+  // ---------- data ----------
+
+  async function ensureConvo(s) {
+    if (S.busy || S.key !== s.key) return;
+    if (S.loaded && S.at === s.lastEventAt) return;
+    S.busy = true;
+    try {
+      const r = await fetch(`/api/transcript?key=${encodeURIComponent(s.key)}`);
+      const d = await r.json().catch(() => ({}));
+      if (S.key !== s.key) return;
+      S.loaded = true;
+      S.private = !!d.private;
+      S.at = s.lastEventAt;
+      const list = Array.isArray(d.messages) ? d.messages : [];
+      if (S.private) {
+        syncMessages([]);
+        showNote(t('privateNote'));
+      } else {
+        syncMessages(list);
+        showNote(list.length ? '' : t('noMessages'));
+      }
+    } catch {
+      if (S.key === s.key) showNote(t('noMessages'));
+    } finally {
+      if (S.key === s.key) S.busy = false;
+    }
+  }
+
+  function showNote(text) {
+    if (!S.el) return;
+    S.el.note.hidden = !text;
+    S.el.note.textContent = text || '';
+  }
+
+  // ---------- entry points ----------
+
+  function render(box, s, now) {
+    if (S.key !== s.key) {
+      S.key = s.key;
+      S.session = s;
+      S.messages = [];
+      S.at = null;
+      S.loaded = false;
+      S.busy = false;
+      S.private = false;
+      S.blocks = [];
+      S.dots = [];
+      S.finalIdx = -1;
+      S.nearBottom = true;
+      S.newCount = 0;
+      S.firstLoad = true;
+      S.el = null;
+      hideTip();
+      showPill();
+      skeleton(box);
+      const mid = document.getElementById('wbMid');
+      if (mid) mid.scrollTop = 0;
+      setTab('all');
+      showNote(t('loadingMsgs'));
+    }
+    S.session = s;
+    renderHead(s, now);
+    renderChildren(s);
+    updateLiveNote();
+    if (!S.loaded || S.at !== s.lastEventAt) ensureConvo(s);
+    positionPill();
+  }
+
+  function clear(box) {
+    S.key = null;
+    S.session = null;
+    S.messages = [];
+    S.at = null;
+    S.loaded = false;
+    S.busy = false;
+    S.private = false;
+    S.blocks = [];
+    S.dots = [];
+    S.finalIdx = -1;
+    S.newCount = 0;
+    S.firstLoad = true;
+    S.el = null;
+    hideTip();
+    showPill();
+    const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
+    if (box.dataset.html !== html) {
+      box.innerHTML = html;
+      box.dataset.html = html;
+    }
+  }
+
+  // ---------- ticking durations ----------
+
+  function tick() {
+    if (!S.el || !S.key) return;
+    const now = Date.now() - (state.skew || 0);
+    const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+    const s = list.find((x) => x.key === S.key) || S.session;
+    if (!s) return;
+    S.session = s;
+    const d = S.el.meta.querySelector('.dt-dur');
+    if (d) d.textContent = durText(s, now);
+    for (const el of S.el.children.querySelectorAll('.dt-child[data-child-key]')) {
+      const k = list.find((x) => x.key === el.dataset.childKey);
+      const d2 = el.querySelector('.dt-child-dur');
+      if (k && d2) d2.textContent = childDur(k, now);
+    }
+  }
+
+  // ---------- events ----------
+
+  function init() {
+    const box = document.getElementById('wbDetail');
+    if (!box) return;
+    box.addEventListener('click', (e) => {
+      const tabBtn = e.target.closest('.dt-tabs [data-tab]');
+      if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+      const dot = e.target.closest('.dt-ev');
+      if (dot) { jumpToBlock(Number(dot.dataset.idx)); return; }
+      const master = e.target.closest('[data-master-key]');
+      if (master) { window.Workbench?.select?.(master.dataset.masterKey); return; }
+      const child = e.target.closest('.dt-child[data-child-key]');
+      if (child) { window.Workbench?.select?.(child.dataset.childKey); return; }
+      const copyResume = e.target.closest('[data-copy-resume]');
+      if (copyResume) { copyText(copyResume.dataset.copyResume); return; }
+      const copyCwd = e.target.closest('[data-copy-cwd]');
+      if (copyCwd) { copyText(copyCwd.dataset.copyCwd); return; }
+      if (e.target.closest('[data-jump-final]')) jumpToFinal();
+    });
+    box.addEventListener('mouseover', (e) => {
+      const dot = e.target.closest('.dt-ev');
+      if (dot) showTip(dot);
+    });
+    box.addEventListener('mouseout', (e) => {
+      const dot = e.target.closest('.dt-ev');
+      if (dot && !dot.contains(e.relatedTarget)) hideTip();
+    });
+    document.getElementById('wbMid')?.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', () => {
+      if (S.messages.length) buildStrip();
+      updateVisibleDots();
+      positionPill();
+      positionToast();
+    });
+    setInterval(tick, 1000);
+  }
+
+  window.WbDetail = { render, clear, jumpToFinal, debug: () => ({ key: S.key, messages: S.messages.length, blocks: S.blocks.length, tab: S.tab, at: S.at, busy: S.busy, loaded: S.loaded }) };
+  init();
+})();

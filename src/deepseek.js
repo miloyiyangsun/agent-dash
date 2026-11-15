@@ -441,6 +441,15 @@ class DeepSeek {
     return this.pidAlive(s.pid) && quiet < LIVE_MS;
   }
 
+  // Old runs were written before ask_deepseek.py learned to save the prompt in a
+  // meta file. The brain's own Bash command still carries the original text, so
+  // DelegationIndex is the fallback when the meta is missing.
+  delegatedPrompt(s) {
+    const rec = s.delegate || this.delegations.lookup(s);
+    const text = rec && typeof rec.prompt === 'string' ? rec.prompt.trim() : '';
+    return text || null;
+  }
+
   sessions(now = Date.now()) {
     const out = [];
     for (const t of this.trackers.values()) {
@@ -448,6 +457,14 @@ class DeepSeek {
       const meta = this.loadMeta(s.file);
       if (meta && s.pid == null && Number.isFinite(meta.pid)) s.pid = meta.pid;
       s.delegate = this.delegations.parentOf(s);
+      // Order: meta.prompt → the prompt inside the delegation command → empty.
+      if (!s.prompt) {
+        const fromDelegate = this.delegatedPrompt(s);
+        if (fromDelegate) {
+          s.prompt = fromDelegate;
+          if (!s.title) s.title = taskTag(fromDelegate);
+        }
+      }
       // ask_deepseek.py now records the brain's own session id in the meta.
       // That explicit link wins over any transcript-based guess.
       const metaParent = meta && typeof meta.parent_session_id === 'string' ? meta.parent_session_id : null;
@@ -502,6 +519,15 @@ class DeepSeek {
       if (messages.length >= TRANSCRIPT_LIMIT) messages.shift();
       messages.push(m);
     };
+    // transcript() can be called before sessions(); apply the same meta →
+    // delegation fallback so old runs still lead with their original prompt.
+    if (!s.prompt) {
+      const fromDelegate = this.delegatedPrompt(s);
+      if (fromDelegate) {
+        s.prompt = fromDelegate;
+        if (!s.title) s.title = taskTag(fromDelegate);
+      }
+    }
     if (s.prompt) push({ role: 'user', text: clip(s.prompt, TEXT_MAX), at: s.startedAt, kind: 'prompt' });
 
     let pos = 0;
@@ -523,8 +549,9 @@ class DeepSeek {
     }
 
     for (const m of messages) if (m.images && m.images.length) m.hasImages = m.images.length;
-    const out = { messages, images: pendingImages, at: st.mtimeMs, run: s.base };
-    this.tcache.set(key, { mtime: st.mtimeMs, size: st.size, messages: out });
+    // Cache the array itself: the API wraps it as { messages }, so a cached
+    // wrapper here would double-nest on every hit after the first read.
+    this.tcache.set(key, { mtime: st.mtimeMs, size: st.size, messages });
     return messages;
   }
 

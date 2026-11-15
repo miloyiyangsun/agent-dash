@@ -14,6 +14,7 @@ const STATIC = {
   '/popout.js': ['popout.js', 'text/javascript; charset=utf-8'],
   '/theme.css': ['theme.css', 'text/css; charset=utf-8'],
   '/ui/tokens.css': ['ui/tokens.css', 'text/css; charset=utf-8'],
+  '/ui/detail.js': ['ui/detail.js', 'text/javascript; charset=utf-8'],
   '/ui/workbench.js': ['ui/workbench.js', 'text/javascript; charset=utf-8'],
   '/ui/timeline.js': ['ui/timeline.js', 'text/javascript; charset=utf-8'],
 };

@@ -351,6 +351,8 @@
         <button type="button" class="tb-count" data-wb-filter="working"><span class="ui-dot st-tool"></span><span data-t="working"></span> <b class="ui-num" id="cntWorking">0</b></button>
         <span class="tb-dot-sep" aria-hidden="true">·</span>
         <button type="button" class="tb-count" data-wb-filter="finished"><span class="ui-dot st-done"></span><span data-t="finished"></span> <b class="ui-num" id="cntFinished">0</b></button>
+        <span class="tb-dot-sep" id="sepError" aria-hidden="true" hidden>·</span>
+        <button type="button" class="tb-count" data-wb-filter="error" id="btnError" hidden><span class="ui-dot st-error"></span><span>出错</span> <b class="ui-num" id="cntError">0</b></button>
       </div>
     </div>
     <div class="tb-center">
@@ -814,16 +816,19 @@ function render() {
   const all = state.data.sessions.filter((s) => matchAgent(s) && (state.showSub || !s.subagent));
 
   const count = (f) => all.filter((s) => f(s.status)).length;
-  const hasError = all.some((s) => s.status === 'error');
-  const needs = count(GROUPS[0].match);
+  const needs = count((s) => s === 'waiting');
+  const errors = count((s) => s === 'error');
   const working = count((s) => ACTIVE.has(s));
   const finished = count(GROUPS[2].match);
   const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
   setCount('cntNeeds', needs);
+  setCount('cntError', errors);
   setCount('cntWorking', working);
   setCount('cntFinished', finished);
-  const needsDot = document.querySelector('#tbCounts [data-wb-filter="needsYou"] .ui-dot');
-  if (needsDot) needsDot.style.color = hasError ? 'var(--st-error)' : 'var(--st-waiting)';
+  const errBtn = document.getElementById('btnError');
+  if (errBtn) errBtn.hidden = errors === 0;
+  const errSep = document.getElementById('sepError');
+  if (errSep) errSep.hidden = errors === 0;
 
   renderToday();
   renderSide();
@@ -1860,6 +1865,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 </script>
+<script src="/ui/detail.js"></script>
 <script src="/ui/workbench.js"></script>
 </body>
 </html>

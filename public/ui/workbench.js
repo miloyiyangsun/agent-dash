@@ -263,7 +263,6 @@
   const agentFilter = new Set();
   let query = '';
   let cursor = null;
-  let convo = { key: null, at: null, messages: null, private: false, busy: false };
 
   let filtersEl = null;
   let statusRowEl = null;
@@ -718,7 +717,6 @@
 
     if (state.wbSel && !lastByKey.has(state.wbSel)) {
       state.wbSel = null;
-      convo = { key: null, at: null, messages: null, private: false, busy: false };
       window.dispatchEvent(new CustomEvent('wb:select', { detail: { key: null } }));
     }
     if (cursor && !lastByKey.has(cursor)) cursor = null;
@@ -874,47 +872,20 @@
 
   // ---------- middle column (T2) ----------
 
-  function sessionTitle(s) {
-    const { tag, title } = titleOf(s);
-    return [tag, title].filter(Boolean).join(' · ') || s.project || s.agent || '';
-  }
-
-  function wbTime(s, now) {
-    return rowTime(s, now) || (typeof timeLabel === 'function' ? timeLabel(s, now) : '');
-  }
-
   function renderDetail(now) {
     const box = document.getElementById('wbDetail');
     if (!box) return;
     const s = state.data.sessions.find((x) => x.key === state.wbSel);
     if (!s) {
-      const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
-      if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+      if (window.WbDetail) window.WbDetail.clear(box);
+      else {
+        const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
+        if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+      }
       return;
     }
-    if (convo.key !== s.key) convo = { key: s.key, at: null, messages: null, private: false, busy: false };
-    // The side panel's loader is generic: pass our own transcript target.
-    if (convo.at !== s.lastEventAt && !convo.busy) {
-      loadConvo(s, convo, () => { if (state.wbSel === s.key) renderDetail(now); });
-    }
-    const body = convo.private
-      ? `<div class="msgs-note">${esc(t('privateNote'))}</div>`
-      : convo.messages == null ? `<div class="msgs-note">${esc(t('loadingMsgs'))}</div>`
-        : !convo.messages.length ? `<div class="msgs-note">${esc(t('noMessages'))}</div>`
-          : renderTranscript(convo.messages, s.key);
-    const html = `<div class="wb-doc">
-      <div class="wb-doc-head">
-        <h1>${esc(sessionTitle(s))}</h1>
-        <div class="wb-doc-meta" style="--s:${statusColor(s.status)}">
-          <span class="ui-dot ${dotClass(s.status)}"></span>
-          <b class="${s.status === 'thinking' ? 'ui-shimmer' : ''}" style="color:var(--s)">${esc(L[s.status] || s.status)}</b>
-          ${s.project ? `<span>${esc(s.project)}</span>` : ''}
-          <span class="ui-num">${esc(wbTime(s, now))}</span>
-        </div>
-      </div>
-      <div class="wb-transcript">${body}</div>
-    </div>`;
-    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+    // T4a: the detail pane owns its own header, strip, tabs and transcript.
+    if (window.WbDetail) window.WbDetail.render(box, s, now);
   }
 
   function setRight(open) {
@@ -931,7 +902,6 @@
     state.wbSel = key;
     cursor = key;
     activeKeyNow = key;
-    if (convo.key !== key) convo = { key, at: null, messages: null, private: false, busy: false };
     document.getElementById('wb')?.classList.remove('wb-left-open');
     window.dispatchEvent(new CustomEvent('wb:select', { detail: { key } }));
     render();
