@@ -86,88 +86,22 @@ function firstLine(text, max = 160) {
 }
 
 // The main brain's Bash command is `python …ask_deepseek.py [flags] "任务 …"`.
-// The prompt can be quoted, wrapped in a heredoc (`"$(cat <<'EOF' … EOF)"`), or
-// read from a temp file, and the invocation may be followed by redirections or
-// more commands. Pull the first plausible prompt back out of it so a running
-// child can be matched to the turn that spawned it even before the run file is
-// named. Returns null for a command that merely mentions the script name.
-function readPromptFile(file) {
-  const p = String(file || '').replace(/^["']|["']$/g, '').trim();
-  if (!p) return null;
-  const st = statSafe(p);
-  if (!st || !st.isFile() || st.size > 1024 * 1024) return null;
-  try {
-    const text = fs.readFileSync(p, 'utf8').trim();
-    return text || null;
-  } catch {
-    return null;
-  }
-}
-
-function promptFromArgs(args) {
-  let rest = String(args || '');
+// Pull the prompt back out of it so a running child can be matched to the turn
+// that spawned it even before ask_deepseek.py has printed the run file name.
+function extractPrompt(command) {
+  const at = String(command || '').indexOf('ask_deepseek.py');
+  if (at < 0) return null;
+  let rest = String(command).slice(at + 'ask_deepseek.py'.length).trim();
   for (;;) {
-    const m = rest.match(/^\s+--(?:cwd|effort|model|thinking-tokens)(?:\s+|=)(?:"(?:[^"\\]|\\.)*"|'[^']*'|\S+)/);
+    const m = rest.match(/^--(?:cwd|effort|model|thinking-tokens)\s+("[^"]*"|'[^']*'|\S+)\s*/);
     if (!m) break;
     rest = rest.slice(m[0].length);
   }
-  rest = rest.replace(/^\s+/, '');
-  if (!rest) return null;
-
-  const heredoc = (s) => {
-    const m = s.match(/^\$\(cat\s+<<\s*'?([A-Za-z0-9_]+)'?\s*\r?\n([\s\S]*?)\r?\n\1\s*\)/);
-    return m ? m[2].trim() || null : null;
-  };
-  const at = heredoc(rest);
-  if (at) return at;
-  const file = (s) => {
-    const m = s.match(/^\$\(cat\s+("[^"]*"|'[^']*'|[^)]+)\)/);
-    return m ? readPromptFile(m[1]) : null;
-  };
-  const fromFile = file(rest);
-  if (fromFile) return fromFile;
-
-  if (rest[0] === '"') {
-    const inner = rest.slice(1);
-    const sub = heredoc(inner) || file(inner);
-    if (sub) return sub;
-    let out = '';
-    for (let i = 0; i < inner.length; i++) {
-      const ch = inner[i];
-      if (ch === '\\' && i + 1 < inner.length) { out += inner[i + 1]; i++; continue; }
-      if (ch === '"') return out.trim() || null;
-      out += ch;
-    }
-    return out.trim() || null;
-  }
-  if (rest[0] === "'") {
-    const end = rest.indexOf("'", 1);
-    return end < 0 ? null : rest.slice(1, end).trim() || null;
-  }
-  // Unquoted prompt: stop at the first shell separator or redirection.
-  const bare = rest.split(/\s*(?:;|\||&|>|<)\s*/)[0].trim();
-  return bare || null;
-}
-
-// A command may mention the script in prose (`echo '… ask_deepseek.py' >> …`)
-// without running it. A real invocation is followed by an argument or a flag.
-function askArgs(command) {
-  const src = String(command || '');
-  let from = 0;
-  for (;;) {
-    const at = src.indexOf('ask_deepseek.py', from);
-    if (at < 0) return null;
-    from = at + 'ask_deepseek.py'.length;
-    let rest = src.slice(from);
-    // The script path itself may be quoted: python -I "…/ask_deepseek.py"
-    if (/^["'`]/.test(rest)) rest = rest.slice(1);
-    if (/^\s+(?![>&|])/.test(rest)) return rest;
-  }
-}
-
-function extractPrompt(command) {
-  const rest = askArgs(command);
-  return rest ? promptFromArgs(rest) : null;
+  const quoted = rest.match(/^"([\s\S]*)"\s*$/);
+  if (quoted) return quoted[1];
+  const single = rest.match(/^'([\s\S]*)'\s*$/);
+  if (single) return single[1];
+  return rest.trim() || null;
 }
 
 function samePrompt(a, b) {
@@ -448,10 +382,7 @@ class DeepSeek {
       const meta = this.loadMeta(s.file);
       if (meta && s.pid == null && Number.isFinite(meta.pid)) s.pid = meta.pid;
       s.delegate = this.delegations.parentOf(s);
-      // ask_deepseek.py now records the brain's own session id in the meta.
-      // That explicit link wins over any transcript-based guess.
-      const metaParent = meta && typeof meta.parent_session_id === 'string' ? meta.parent_session_id : null;
-      s.parentId = metaParent || (s.delegate ? s.delegate.sessionId : null);
+      s.parentId = s.delegate ? s.delegate.sessionId : null;
 
       const quiet = now - (s.lastEventAt || s.mtime || now);
       let status = s.status;
@@ -656,10 +587,9 @@ class DelegationIndex {
   // session does not get re-parsed on every tick.
   read(file, st, sessionId) {
     const prev = this.files.get(file);
-    // First sight: read the whole log (up to 128 MB). A busy brain transcript
-    // can exceed 40 MB, and its oldest delegations are exactly the ones a short
-    // tail window used to miss.
-    const first = prev ? prev.offset : Math.max(0, st.size - 128 * 1024 * 1024);
+    // First sight: take the whole log when it is small enough, else its last 16 MB,
+    // which still reaches back further than any child still on screen.
+    const first = prev ? prev.offset : Math.max(0, st.size - 16 * 1024 * 1024);
     if (prev && st.size <= prev.offset) {
       if (st.size === prev.offset) return false;
       this.files.delete(file); // truncated: re-read below from the top
@@ -673,54 +603,15 @@ class DelegationIndex {
     this.files.set(file, { offset: st.size, partial, size: st.size });
     let changed = false;
     for (const line of lines) {
-      // Tool results are where the run file name shows up, but they never repeat
-      // the script name, so the old "ask_deepseek only" filter dropped every
-      // exact match. A result for one of our tool_uses can be many megabytes and
-      // only the run name matters, so grab it from the raw line and move on.
-      const note = line.indexOf('<task-notification>') >= 0;
-      if (line.indexOf('ask_deepseek') < 0) {
-        const idm = line.match(/"tool_use_id"\s*:\s*"([^"]+)"/);
-        if (idm && this.byToolUse.has(idm[1])) {
-          const m = line.match(/run-(\d{8}-\d{6})\.jsonl/);
-          if (m) {
-            const rec = this.byToolUse.get(idm[1]);
-            if (!rec.run) { rec.run = `run-${m[1]}`; this.byRun.set(rec.run, idm[1]); changed = true; }
-          }
-          continue;
-        }
-        if (!note) continue;
-      }
+      if (line.indexOf('ask_deepseek') < 0) continue;
       let o = null;
       try { o = JSON.parse(line); } catch { continue; }
-      // api-request-blob lines repeat the same tool_use without a timestamp.
-      if (o.type !== 'assistant' && o.type !== 'user') continue;
       const content = (o.message && o.message.content) || [];
-
-      // A background delegation finishes via a notification. It names the
-      // original tool_use and the task output file, whose tail carries the run
-      // file name that a foreground tool_result would have printed directly.
-      const noteText = typeof content === 'string' ? content
-        : Array.isArray(content) ? content.map((x) => (x && x.text) || '').join('\n') : '';
-      if (noteText.indexOf('<task-notification>') >= 0) {
-        const tu = noteText.match(/<tool-use-id>([^<]+)<\/tool-use-id>/);
-        const of = noteText.match(/<output-file>([^<]+)<\/output-file>/);
-        if (tu && of && this.byToolUse.has(tu[1].trim())) {
-          const rec = this.byToolUse.get(tu[1].trim());
-          if (!rec.run) {
-            const run = this.runFromTaskOutput(of[1].trim());
-            if (run) { rec.run = run; this.byRun.set(run, tu[1].trim()); changed = true; }
-          }
-        }
-      }
-
       for (const c of Array.isArray(content) ? content : []) {
         if (c.type === 'tool_use' && c.input && typeof c.input.command === 'string'
           && c.input.command.includes('ask_deepseek.py')) {
-          const args = askArgs(c.input.command);
-          if (!args) continue; // a mention, not an invocation
-          if (this.byToolUse.has(c.id)) continue;
           const at = o.timestamp ? Date.parse(o.timestamp) : null;
-          this.byToolUse.set(c.id, { sessionId: o.sessionId || sessionId, at, prompt: promptFromArgs(args), run: null });
+          this.byToolUse.set(c.id, { sessionId: o.sessionId || sessionId, at, prompt: extractPrompt(c.input.command), run: null });
           changed = true;
         } else if (c.type === 'tool_result' && c.tool_use_id && this.byToolUse.has(c.tool_use_id)) {
           const rec = this.byToolUse.get(c.tool_use_id);
@@ -733,15 +624,6 @@ class DelegationIndex {
       }
     }
     return changed;
-  }
-
-  // The task output tail ends with ask_deepseek.py's "完整记录 …run-….jsonl".
-  runFromTaskOutput(file) {
-    const st = statSafe(file);
-    if (!st || !st.isFile()) return null;
-    const tail = readRange(file, Math.max(0, st.size - 256 * 1024), st.size);
-    const m = tail.toString('utf8').match(/run-(\d{8}-\d{6})\.jsonl/);
-    return m ? `run-${m[1]}` : null;
   }
 
   tick(watch) {
