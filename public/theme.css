@@ -39,6 +39,7 @@ h1 { font-weight: 500; letter-spacing: .04em; }
   border-radius: 3px;
 }
 .office { background: color-mix(in srgb, var(--panel) 92%, var(--bg)); }
+#lightbox {
   position: fixed; inset: 0; z-index: 200; display: none;
   background: var(--scrim);
   align-items: center; justify-content: center; padding: 3vmin; cursor: zoom-out;
@@ -130,7 +131,7 @@ header#topbar.tb-hide-counts .tb-counts { display: none; }
 .tb-dot-sep { color: var(--faint); }
 .view-seg { position: relative; }
 .view-seg > button { position: relative; z-index: 1; }
-.view-seg > button.on { background: transparent; color: var(--ink); }
+.view-seg > button.on { color: var(--ink); }
 .seg-thumb {
   position: absolute;
   z-index: 0;
@@ -216,21 +217,20 @@ header#topbar.tb-hide-counts .tb-counts { display: none; }
 }
 .wb-left-head .ui-num { color: var(--faint); font-size: var(--fs-12); }
 .wb-right-head .icon-btn { margin-left: auto; width: var(--sp-7); height: var(--sp-7); }
-.wb-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--sp-2); display: flex; flex-direction: column; gap: 1px; }
-.wb-mid { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+.wb-list { flex: 1; overflow-y: auto; padding: var(--sp-2); display: flex; flex-direction: column; gap: 1px; }
+.wb-mid { min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); }
 .wb-mid-inner { display: flex; flex-direction: column; max-width: 820px; min-height: 100%; margin: 0 auto; padding: var(--sp-5) var(--sp-6) var(--sp-8); }
 .wb-right-body { flex: 1; overflow-y: auto; padding: var(--sp-3); font-size: var(--fs-12); }
 .wb-empty { display: flex; flex: 1; align-items: center; justify-content: center; min-height: calc(var(--sp-8) * 7); color: var(--muted); font-size: var(--fs-13); }
 #tl { flex: 1; min-height: 0; display: flex; background: var(--bg); }
 #tl .wb-empty { flex: 1; }
-/* T10: the agent drawer shrinks the stage on wide screens instead of covering it */
+/* T10/T11: the agent drawer shrinks the office and graph stages on wide
+   screens instead of covering them; the extra 26px keeps the edge dots clear. */
 @media (min-width: 1200px) {
   body.drawer-open #officeWrap,
-  body.drawer-open #tl,
-  body.drawer-open #topo { margin-right: 400px; }
+  body.drawer-open #topoWrap { margin-right: 426px; }
   body.drawer-collapsed #officeWrap,
-  body.drawer-collapsed #tl,
-  body.drawer-collapsed #topo { margin-right: 26px; }
+  body.drawer-collapsed #topoWrap { margin-right: 52px; }
 }
 @media (max-width: 1199px) {
   #agentDrawer .dr-panel { box-shadow: var(--shadow-float); }

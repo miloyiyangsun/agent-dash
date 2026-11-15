@@ -1126,7 +1126,7 @@
     if (editable) return;
     // The timeline has its own j/k; only move this tree while it is on screen.
     const wbEl = document.getElementById('wb');
-    if (!wbEl || wbEl.hidden) return;
+    if (!wbEl || wbEl.hidden || (typeof state !== 'undefined' && state.view !== 'workbench')) return;
     if ((e.key === 'j' || e.key === 'J') && !e.shiftKey) { e.preventDefault(); moveCursor(1); return; }
     if ((e.key === 'k' || e.key === 'K') && !e.shiftKey) { e.preventDefault(); moveCursor(-1); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); return; }
@@ -1144,7 +1144,7 @@
   // for a clock tick.
   function tickTimes() {
     const wbEl = document.getElementById('wb');
-    if (!wbEl || wbEl.hidden) return;
+    if (!wbEl || wbEl.hidden || (typeof state !== 'undefined' && state.view !== 'workbench')) return;
     const now = Date.now() - (state.skew || 0);
     for (const entry of rowCache.values()) {
       if (!entry.status || !LIVE.has(entry.status)) continue;

@@ -287,14 +287,47 @@
       this.canvas.addEventListener('mousemove', (e) => this.pointer(e));
       this.canvas.addEventListener('click', (e) => this.pointer(e, true));
       this.canvas.addEventListener('mouseleave', () => { this.hoverKey = null; this.onHover(null); });
+      // Ctrl+wheel zooms the 2D camera; a plain wheel is left to the page so
+      // the long dashboard can turn to the next screen.
+      this.zoomBoost = 1;
+      this.onWheel = (e) => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        const d = Math.max(-120, Math.min(120, e.deltaY));
+        this.zoomBoost = clamp(this.zoomBoost * Math.exp(-d * 0.0016), 0.55, 3);
+      };
+      this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
       this.resize();
       this.last = performance.now();
       // Resolves true once a few frames have been drawn with data in place,
       // false if the renderer gave up (3D load failure).
       this.ready = new Promise((ok) => (this.markReady = ok));
       this.framesShown = 0;
-      const loop = (t) => { if (this.dead) return; this.frame(t); this.raf = requestAnimationFrame(loop); };
+      this.paused = false;
+      this.startLoop();
+    }
+
+    startLoop() {
+      this.paused = false;
+      this.last = performance.now();
+      const loop = (t) => {
+        if (this.dead || this.paused) return;
+        this.frame(t);
+        this.raf = requestAnimationFrame(loop);
+      };
       this.raf = requestAnimationFrame(loop);
+    }
+
+    pause() {
+      if (this.dead || this.paused) return;
+      this.paused = true;
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    }
+
+    resume() {
+      if (this.dead || !this.paused) return;
+      this.startLoop();
     }
 
     destroy() {
@@ -302,6 +335,7 @@
       cancelAnimationFrame(this.raf);
       this.ro.disconnect();
       this.theme.removeEventListener('change', this.onTheme);
+      this.canvas.removeEventListener('wheel', this.onWheel);
       this.canvas.remove();
     }
 
@@ -698,7 +732,7 @@
       const top = this.iso(0, 0, WALL_H).y - 20, bottom = this.iso(W, D, 0).y + 10;
       const inset = this.inset();
       const vw = Math.max(120, this.cw - inset);
-      const zoom = Math.min(vw / (right - left + 30), this.ch / (bottom - top + 30), 2);
+      const zoom = Math.min(vw / (right - left + 30), this.ch / (bottom - top + 30), 2) * (this.zoomBoost || 1);
       const want = { zoom, ox: vw / 2 - ((left + right) / 2) * zoom, oy: this.ch / 2 - ((top + bottom) / 2) * zoom };
       // While the inset eases, follow it exactly; otherwise settle gently.
       if (!this.cam || this.insetMoving()) this.cam = want;
@@ -1817,13 +1851,16 @@
       }
 
       if (this.offDuty > 0) {
-        const d = this.iso(0.2, this.plan.door.y + 0.9, 0);
+        // Screen-space bottom-left, clear of the legends (they moved right in T11).
+        c.save();
+        c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         c.font = '600 10px ui-sans-serif, system-ui, -apple-system, "PingFang TC", sans-serif';
-        c.textAlign = 'center';
+        c.textAlign = 'left';
         c.fillStyle = this.pal.text;
         c.globalAlpha = 0.65;
-        c.fillText(`+${this.offDuty} ${this.offDutyLabel}`, d.x - 10, d.y + 14);
+        c.fillText(`+${this.offDuty} ${this.offDutyLabel}`, 14, Math.max(16, this.ch - 14));
         c.globalAlpha = 1;
+        c.restore();
       }
 
       const z = this.cam.zoom;

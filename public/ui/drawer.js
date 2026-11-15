@@ -109,11 +109,10 @@
   };
 
   let view = 'workbench';
-  let expanded = (() => {
-    const saved = typeof store !== 'undefined' ? store.get('drawer', null) : null;
-    if (saved === true || saved === false) return saved;
-    return window.innerWidth >= 1200;
-  })();
+  const savedDrawer = typeof store !== 'undefined' ? store.get('drawer', null) : null;
+  let prefExpanded = savedDrawer === true || savedDrawer === false ? savedDrawer : true;
+  // Wide screens open the panel by default; narrow ones start with the button.
+  let expanded = window.innerWidth >= 1200 ? prefExpanded : false;
   let mode = 'list';
   let sel = null;
   let recentAll = false;
@@ -565,15 +564,19 @@
   function openInWorkbench() {
     if (!sel) return;
     const key = sel;
-    if (typeof setView === 'function') setView('workbench');
+    if (typeof goToScreen === 'function') goToScreen('workbench');
+    else if (typeof setView === 'function') setView('workbench');
     if (typeof state !== 'undefined') state.wbSel = key;
     if (window.Workbench?.select) window.Workbench.select(key);
     else window.dispatchEvent(new CustomEvent('wb:select', { detail: { key } }));
   }
 
-  function setExpanded(next) {
+  function setExpanded(next, remember = true) {
     expanded = !!next;
-    store.set('drawer', expanded);
+    if (remember) {
+      prefExpanded = expanded;
+      store.set('drawer', expanded);
+    }
     root.classList.toggle('is-collapsed', !expanded);
     updateVisibility();
   }
@@ -681,6 +684,18 @@
 
   el.strip.addEventListener('click', () => setExpanded(true));
   el.collapse.addEventListener('click', () => setExpanded(false));
+  // The drawer sits outside the pager, so its lists hand the wheel back to the
+  // page once they reach their end (the pager does the same for in-screen lists).
+  root.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 1) return;
+    const list = e.target.closest('.dr-rows, .dr-body');
+    if (!list) return;
+    const down = e.deltaY > 0;
+    const can = down ? list.scrollTop + list.clientHeight < list.scrollHeight - 1 : list.scrollTop > 1;
+    if (can) return;
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('wmad:page', { detail: { down } }));
+  }, { passive: false });
 
   el.detail.addEventListener('click', (e) => {
     if (e.target.closest('#drBack')) { back(); return; }
@@ -715,7 +730,18 @@
     if (mode === 'detail') back();
     else if (expanded) setExpanded(false);
   });
-  window.addEventListener('resize', () => { if (drawerVisible()) updateVisibility(); });
+  // Below 1200px the panel is a drawer: fold it away and let the screen's
+  // Agent button open it. Widening restores the person's wide-screen choice.
+  let lastWide = window.innerWidth >= 1200;
+  window.addEventListener('resize', () => {
+    const wide = window.innerWidth >= 1200;
+    if (wide !== lastWide) {
+      lastWide = wide;
+      setExpanded(wide ? prefExpanded : false, false);
+      return;
+    }
+    if (drawerVisible()) updateVisibility();
+  });
   setInterval(tick, 1000);
 
   applyStatic();

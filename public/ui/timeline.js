@@ -745,7 +745,8 @@
     if (!key) return;
     cursorKey = key;
     state.wbSel = key;
-    if (typeof setView === 'function') setView('workbench');
+    if (typeof goToScreen === 'function') goToScreen('workbench');
+    else if (typeof setView === 'function') setView('workbench');
     // select() also moves the workbench cursor, so the tree highlight follows.
     if (WB()?.select) WB().select(key);
     else window.dispatchEvent(new CustomEvent('wb:select', { detail: { key } }));

@@ -98,7 +98,7 @@
   /* The office owns the whole stage in full-screen mode; no side panel inset. */
   body.full #officeWrap { position: relative; flex: 1; min-height: 0; }
   body.full .office { height: 100%; min-height: 0; border: 0; border-radius: 0; }
-  body.full .legend { position: absolute; left: 12px; bottom: 10px; margin: 0; padding: 5px 8px; gap: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(6px); font-size: var(--fs-11); }
+  body.full .legend { position: absolute; left: auto; right: 12px; bottom: 10px; margin: 0; padding: 5px 8px; gap: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(6px); font-size: var(--fs-11); }
   body.full .legend .dot { width: 6px; height: 6px; }
   body.full .legend .agent-logo { width: 12px; height: 12px; padding: 0; }
   body.full #agentLegend { bottom: 42px; }
@@ -197,13 +197,12 @@
       </div>
     </div>
     <div class="tb-center">
-      <div class="ui-seg view-seg" id="viewSeg" role="group">
-        <span class="seg-thumb" id="segThumb" aria-hidden="true"></span>
-        <button type="button" data-v="workbench" data-t="viewWorkbench"></button>
-        <button type="button" data-v="timeline" data-t="viewTimeline"></button>
-        <button type="button" data-v="topo" data-t="viewTopo"></button>
-        <button type="button" data-v="office" data-t="viewOffice"></button>
-      </div>
+      <nav class="ui-seg view-seg" id="viewSeg" aria-label="跳到某一屏" data-a="screenNav">
+        <button type="button" data-screen="office" data-t="viewOffice"></button>
+        <button type="button" data-screen="topo" data-t="viewTopo"></button>
+        <button type="button" data-screen="workbench" data-t="viewWorkbench"></button>
+        <button type="button" data-screen="timeline" data-t="viewTimeline"></button>
+      </nav>
     </div>
     <div class="tb-right">
       <label class="tb-search">
@@ -269,6 +268,14 @@
     <button class="btn" id="videoPipBtn" data-t="pip" hidden></button>
     <button class="btn" id="closePreview" data-t="pipStop"></button>
   </div>
+  <div id="pager">
+  <section class="screen" id="office" aria-labelledby="screenOfficeH">
+    <div class="screen-head">
+      <h2 class="screen-h" id="screenOfficeH" data-t="viewOffice"></h2>
+      <span class="screen-desc" data-t="screenOfficeDesc"></span>
+      <button type="button" class="screen-agent-btn" id="agentBtnOffice" data-t="drawerTitle"></button>
+    </div>
+    <div class="screen-body" id="officeBody">
   <div id="officeWrap">
     <div class="office-tools">
       <div class="ui-seg" id="qualSeg" role="group">
@@ -283,11 +290,31 @@
         </div>
       </details>
     </div>
-    <div class="office loading" id="office"><div class="office-loader"><div class="spin"></div><span id="loaderText"></span></div></div>
+    <div class="office loading" id="officeStage"><div class="office-loader"><div class="spin"></div><span id="loaderText"></span></div></div>
     <div class="legend" id="legend"></div>
     <div class="legend" id="agentLegend" hidden></div>
   </div>
-  <div id="wb" hidden>
+    <div class="screen-empty" id="officeEmpty" hidden></div>
+    </div>
+    <button type="button" class="scroll-hint" id="scrollHint"><span data-t="scrollHint"></span></button>
+  </section>
+
+  <section class="screen" id="topo" aria-labelledby="screenTopoH">
+    <div class="screen-head">
+      <h2 class="screen-h" id="screenTopoH" data-t="viewTopo"></h2>
+      <span class="screen-desc" data-t="screenTopoDesc"></span>
+      <button type="button" class="screen-agent-btn" id="agentBtnTopo" data-t="drawerTitle"></button>
+    </div>
+    <div class="screen-body"><div id="topoWrap"></div></div>
+  </section>
+
+  <section class="screen" id="workbench" aria-labelledby="screenWorkbenchH">
+    <div class="screen-head">
+      <h2 class="screen-h" id="screenWorkbenchH" data-t="viewWorkbench"></h2>
+      <span class="screen-desc" data-t="screenWorkbenchDesc"></span>
+    </div>
+    <div class="screen-body">
+  <div id="wb">
     <section class="wb-left" id="wbLeft">
       <div class="wb-left-head">
         <h2 data-t="wbTasks"></h2><span class="ui-num" id="wbCount">0</span>
@@ -304,8 +331,23 @@
     </aside>
     <button class="wb-right-tab" id="wbRightShow" type="button"><span data-t="wbProperties"></span></button>
   </div>
-  <div id="tl" hidden></div>
-  <div id="topo" hidden></div>
+    </div>
+  </section>
+
+  <section class="screen" id="timeline" aria-labelledby="screenTimelineH">
+    <div class="screen-head">
+      <h2 class="screen-h" id="screenTimelineH" data-t="viewTimeline"></h2>
+      <span class="screen-desc" data-t="screenTimelineDesc"></span>
+    </div>
+    <div class="screen-body"><div id="tl"></div></div>
+  </section>
+  </div>
+  <nav id="screenDots" aria-label="跳到某一屏" data-a="screenNav">
+    <button type="button" class="sd" data-screen="office" data-a="viewOffice"><span class="sd-label" data-t="viewOffice"></span></button>
+    <button type="button" class="sd" data-screen="topo" data-a="viewTopo"><span class="sd-label" data-t="viewTopo"></span></button>
+    <button type="button" class="sd" data-screen="workbench" data-a="viewWorkbench"><span class="sd-label" data-t="viewWorkbench"></span></button>
+    <button type="button" class="sd" data-screen="timeline" data-a="viewTimeline"><span class="sd-label" data-t="viewTimeline"></span></button>
+  </nav>
   <main id="main"></main>
 </div>
 <div id="lightbox">
@@ -391,14 +433,13 @@ const store = (() => {
   return { get, set };
 })();
 
-const PREF_DEFAULTS = { view: 'workbench', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, lang: 'auto', theme: 'auto' };
+const PREF_DEFAULTS = { quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, lang: 'auto', theme: 'auto' };
 function validAgentId(v) {
   return typeof v === 'string' && v !== 'all' && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(v) && !Object.hasOwn(Object.prototype, v);
 }
 function validPreference(k, v) {
   if (!Object.hasOwn(PREF_DEFAULTS, k)) return false;
   if (typeof PREF_DEFAULTS[k] === 'boolean') return typeof v === 'boolean';
-  if (k === 'view') return ['workbench', 'timeline', 'topo', 'office'].includes(v);
   if (k === 'quality') return ['mid', 'high'].includes(v);
   if (k === 'theme') return ['auto', 'dark', 'light'].includes(v);
   // Which agents to show; none selected means all of them.
@@ -412,9 +453,6 @@ function validPreference(k, v) {
   if (validAgentId(old) && !store.get('agents', []).length) store.set('agents', [old]);
   if (old !== 'all') store.set('agent', 'all');
 }
-// The redesign opens on the workbench once; afterwards the last view sticks.
-// (A ?view= URL parameter is applied later and still wins.)
-if (store.get('viewV', 0) !== 2) { store.set('view', 'workbench'); store.set('viewV', 2); }
 function readPreferences() {
   return Object.fromEntries(Object.entries(PREF_DEFAULTS).map(([k, d]) => {
     const v = store.get(k, d);
@@ -447,14 +485,16 @@ if (PIP) document.body.classList.add('pip');
       for (const [k, v] of Object.entries(JSON.parse(q.get('prefs')) || {})) if (validPreference(k, v)) store.set(k, v);
     } catch { /* malformed preferences use the saved defaults */ }
   }
-  for (const k of ['view', 'quality', 'scene', 'lang']) if (validPreference(k, q.get(k))) store.set(k, q.get(k));
-  if (location.search) history.replaceState(null, '', location.pathname + (PIP ? '?pip=1' : ''));
+  for (const k of ['quality', 'scene', 'lang']) if (validPreference(k, q.get(k))) store.set(k, q.get(k));
+  if (location.search) history.replaceState(null, '', location.pathname + (PIP ? '?pip=1' : '') + location.hash);
 }
 
 const state = {
   ...readPreferences(),
   // The dashboard is always the full-window office with the agent panel; the pop-out keeps its compact views.
   full: !PIP,
+  // Which screen of the long page is in view (office / topo / workbench / timeline).
+  view: 'office',
   scenes: [],
   data: { now: Date.now(), sessions: [] },
   skew: 0,
@@ -652,16 +692,10 @@ function render() {
   document.title = (needs ? '● ' : '') + (working ? `(${working}) ` : '') + tr('brand');
 
   const main = document.getElementById('main');
-  const officeMode = state.view === 'office';
-  const wbMode = state.view === 'workbench';
-  const timelineMode = state.view === 'timeline';
-  const topoMode = state.view === 'topo';
-  document.getElementById('officeWrap').style.display = officeMode ? '' : 'none';
-  document.getElementById('wb').hidden = !wbMode;
-  document.getElementById('tl').hidden = !timelineMode;
-  document.getElementById('topo').hidden = !topoMode;
-  window.Topo?.setActive?.(topoMode);
-  window.AgentDrawer?.setView?.(state.view);
+  const active = state.view;
+  const officeMode = active === 'office';
+  window.Topo?.setActive?.(active === 'topo');
+  window.AgentDrawer?.setView?.(active);
   // The office decides who sits at a desk and who wanders around.
   const officeList = all;
   const poppedOut = !!popout?.win;
@@ -669,7 +703,9 @@ function render() {
   // all walking in through the door.
   if (office && state.loaded) {
     office.showAgent = state.showAgent;
-    office.setVisible(officeMode && !poppedOut);
+    const on = officeMode && !poppedOut;
+    office.setVisible(on);
+    if (on) office.resume?.(); else office.pause?.();
     office.update(officeList);
   }
   const agents = new Set(officeList.map(s => s.agent));
@@ -681,30 +717,38 @@ function render() {
   document.getElementById('idleToggle').style.display = officeMode && !state.full ? 'none' : '';
   if (poppedOut) {
     document.getElementById('officeWrap').style.display = 'none';
-    document.getElementById('wb').hidden = true;
-    document.getElementById('tl').hidden = true;
-    document.getElementById('topo').hidden = true;
-    main.innerHTML = `<div class="empty">${esc(L.pipOn)}</div>`;
+    if (state.full) {
+      const empty = document.getElementById('officeEmpty');
+      if (empty) { empty.hidden = false; empty.innerHTML = `<div class="empty">${esc(L.pipOn)}</div>`; }
+    } else {
+      main.innerHTML = `<div class="empty">${esc(L.pipOn)}</div>`;
+    }
     return;
   }
+  const officeEmpty = document.getElementById('officeEmpty');
+  if (officeEmpty) officeEmpty.hidden = true;
   if (officeMode) {
-    main.innerHTML = officeList.length ? '' : `<div class="empty">${esc(L.empty)}</div>`;
+    if (officeEmpty && !officeList.length) {
+      officeEmpty.hidden = false;
+      officeEmpty.innerHTML = `<div class="empty">${esc(L.empty)}</div>`;
+    }
     document.getElementById('officeWrap').style.display = officeList.length || state.full ? '' : 'none';
+    if (!state.full) main.innerHTML = officeList.length ? '' : `<div class="empty">${esc(L.empty)}</div>`;
     window.AgentDrawer?.render?.();
     return;
   }
-  if (wbMode) {
-    main.innerHTML = '';
+  if (active === 'workbench') {
+    if (!state.full) main.innerHTML = '';
     window.Workbench?.render?.();
     return;
   }
-  if (timelineMode) {
-    main.innerHTML = '';
+  if (active === 'timeline') {
+    if (!state.full) main.innerHTML = '';
     window.Timeline?.render?.();
     return;
   }
-  if (topoMode) {
-    main.innerHTML = '';
+  if (active === 'topo') {
+    if (!state.full) main.innerHTML = '';
     window.Topo?.render?.();
     window.AgentDrawer?.render?.();
   }
@@ -829,29 +873,144 @@ document.getElementById('qualSeg').addEventListener('click', (e) => {
   setQuality(b.dataset.v);
 });
 document.getElementById('qualitySelect').addEventListener('change', (e) => setQuality(e.target.value));
-function fadeView(id) {
-  if (reducedMotion()) return;
-  const el = document.getElementById(id);
+// ---- T11: one long page, four viewport-high screens
+const SCREENS = ['office', 'topo', 'workbench', 'timeline'];
+const pagerEl = document.getElementById('pager');
+const scrollHint = document.getElementById('scrollHint');
+let screenIdx = 0;
+let wheelLock = 0;
+let navLock = 0;
+
+function hideScrollHint() {
+  if (!scrollHint || scrollHint.hidden) return;
+  scrollHint.hidden = true;
+  store.set('scrollHint', true);
+}
+if (store.get('scrollHint', false) && scrollHint) scrollHint.hidden = true;
+scrollHint?.addEventListener('pointerenter', hideScrollHint);
+scrollHint?.addEventListener('click', () => { hideScrollHint(); goToScreen('topo'); });
+
+function setActiveScreen(key) {
+  if (!SCREENS.includes(key)) key = 'office';
+  const changed = state.view !== key;
+  state.view = key;
+  screenIdx = SCREENS.indexOf(key);
+  for (const el of document.querySelectorAll('.screen')) el.classList.toggle('is-active', el.id === key);
+  syncViewSeg();
+  if (changed) { hideOfficeTip(); render(); }
+  else syncControls();
+  if (state.full) history.replaceState(null, '', '#' + key);
+}
+
+function goToScreen(key, { smooth = true } = {}) {
+  if (!SCREENS.includes(key)) return;
+  if (!state.full) { setActiveScreen(key); return; }
+  const el = document.getElementById(key);
   if (!el) return;
-  el.classList.remove('view-enter');
-  void el.offsetWidth;
-  el.classList.add('view-enter');
-  clearTimeout(el._fadeT);
-  el._fadeT = setTimeout(() => el.classList.remove('view-enter'), 180);
+  hideScrollHint();
+  navLock = Date.now() + 900;
+  const top = pagerEl.scrollTop + el.getBoundingClientRect().top - pagerEl.getBoundingClientRect().top;
+  try { pagerEl.scrollTo({ top, behavior: smooth && !reducedMotion() ? 'smooth' : 'instant' }); }
+  catch { pagerEl.scrollTop = top; }
+  setActiveScreen(key);
 }
-function setView(v) {
-  state.view = v; store.set('view', v); hideOfficeTip(); syncControls(); render();
-  const viewId = v === 'workbench' ? 'wb' : v === 'timeline' ? 'tl' : v === 'topo' ? 'topo' : v === 'office' ? 'officeWrap' : '';
-  if (viewId) fadeView(viewId);
+// Old callers keep working; the view is now a scroll position, not a stored preference.
+function setView(v) { goToScreen(v); }
+
+// The screen that covers more than half the pager wins; scroll-snap keeps that
+// unambiguous once a gesture settles.
+function pickActiveScreen() {
+  if (!state.full || !pagerEl || Date.now() < navLock) return;
+  const pr = pagerEl.getBoundingClientRect();
+  let best = null;
+  let bestRatio = 0;
+  for (const el of document.querySelectorAll('.screen')) {
+    const r = el.getBoundingClientRect();
+    const overlap = Math.max(0, Math.min(r.bottom, pr.bottom) - Math.max(r.top, pr.top));
+    const ratio = overlap / Math.max(1, Math.min(r.height, pr.height));
+    if (ratio > bestRatio) { bestRatio = ratio; best = el.id; }
+  }
+  if (best && bestRatio >= 0.5 && best !== state.view) setActiveScreen(best);
 }
-document.getElementById('viewSeg').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  setView(b.dataset.v);
+if ('IntersectionObserver' in window && pagerEl) {
+  const io = new IntersectionObserver(() => pickActiveScreen(), { root: pagerEl, threshold: [0, 0.5, 1] });
+  for (const el of document.querySelectorAll('.screen')) io.observe(el);
+}
+window.addEventListener('hashchange', () => {
+  const key = location.hash.slice(1);
+  if (SCREENS.includes(key) && key !== state.view) goToScreen(key);
 });
+
+// Wheel: inner lists scroll first; at their end, or anywhere outside one, the
+// pager turns one screen. Ctrl+wheel is left alone so canvases can zoom.
+function innerScroller(el) {
+  for (let n = el; n && n !== pagerEl; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) return n;
+  }
+  return null;
+}
+pagerEl?.addEventListener('wheel', (e) => {
+  if (!state.full || e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 1) return;
+  const down = e.deltaY > 0;
+  const inner = innerScroller(e.target);
+  if (inner) {
+    const can = down ? inner.scrollTop + inner.clientHeight < inner.scrollHeight - 1 : inner.scrollTop > 1;
+    if (can) return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  hideScrollHint();
+  const now = Date.now();
+  if (now - wheelLock < 260) return;
+  wheelLock = now;
+  goToScreen(SCREENS[screenIdx + (down ? 1 : -1)] || state.view);
+}, { passive: false, capture: true });
+// The Agent drawer is fixed outside the pager; its lists ask the page to turn
+// when they reach their end.
+window.addEventListener('wmad:page', (e) => {
+  if (!state.full) return;
+  const now = Date.now();
+  if (now - wheelLock < 260) return;
+  wheelLock = now;
+  hideScrollHint();
+  const down = !!e.detail?.down;
+  goToScreen(SCREENS[screenIdx + (down ? 1 : -1)] || state.view);
+});
+
+// PageDown / PageUp / Space turn the page unless the focus is in a field or
+// inside a list that scrolls on its own.
+document.addEventListener('keydown', (e) => {
+  if (!state.full || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+  const isPageDown = e.key === 'PageDown';
+  const isPageUp = e.key === 'PageUp';
+  const isSpace = e.key === ' ' || e.code === 'Space';
+  if (!isPageDown && !isPageUp && !isSpace) return;
+  if (e.target.closest?.('input, select, textarea, [contenteditable]')) return;
+  if (innerScroller(e.target)) return;
+  const down = isPageDown || (isSpace && !e.shiftKey);
+  const up = isPageUp || (isSpace && e.shiftKey);
+  if (!down && !up) return;
+  e.preventDefault();
+  hideScrollHint();
+  goToScreen(SCREENS[screenIdx + (down ? 1 : -1)] || state.view);
+}, true);
+
+document.getElementById('viewSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-screen]'); if (!b) return;
+  goToScreen(b.dataset.screen);
+});
+document.getElementById('screenDots').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-screen]'); if (!b) return;
+  goToScreen(b.dataset.screen);
+});
+for (const id of ['agentBtnOffice', 'agentBtnTopo']) {
+  document.getElementById(id)?.addEventListener('click', () => window.AgentDrawer?.setExpanded?.(true, false));
+}
 document.getElementById('tbCounts').addEventListener('click', (e) => {
   const b = e.target.closest('[data-wb-filter]'); if (!b) return;
   state.wbFilter = b.dataset.wbFilter;
-  if (state.view !== 'workbench') setView('workbench');
+  if (state.view !== 'workbench') goToScreen('workbench');
   window.dispatchEvent(new CustomEvent('wb:filter', { detail: { filter: state.wbFilter } }));
 });
 const wbSearch = document.getElementById('wbSearch');
@@ -899,27 +1058,24 @@ function syncTopbar() {
   if (over()) bar.classList.add('tb-hide-counts');
 }
 
-// The selected view's background slides between the three labels.
+// Top-bar anchors and the edge dots both highlight the screen in view.
 function syncViewSeg() {
-  const seg = document.getElementById('viewSeg');
-  const thumb = document.getElementById('segThumb');
-  if (!seg || !thumb) return;
-  const on = seg.querySelector('button.on');
-  if (!on) { thumb.style.opacity = '0'; return; }
-  thumb.style.opacity = '1';
-  thumb.style.width = `${on.offsetWidth}px`;
-  thumb.style.transform = `translateX(${on.offsetLeft}px)`;
+  document.querySelectorAll('#viewSeg button').forEach((b) => {
+    const on = b.dataset.screen === state.view;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  document.querySelectorAll('#screenDots .sd').forEach((b) => {
+    const on = b.dataset.screen === state.view;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'true' : 'false');
+  });
 }
-addEventListener('resize', () => { syncViewSeg(); syncTopbar(); });
+addEventListener('resize', () => { syncViewSeg(); syncTopbar(); pickActiveScreen(); });
 
 const notifyBtn = document.getElementById('notify');
 function syncControls() {
   const view = state.view;
-  document.querySelectorAll('#viewSeg button').forEach((b) => {
-    const on = b.dataset.v === view;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
   syncViewSeg();
   requestAnimationFrame(syncTopbar);
   document.querySelectorAll('#qualSeg button').forEach((b) => {
@@ -995,7 +1151,7 @@ function openOfficeTask(key) {
     return;
   }
   state.wbSel = key;
-  setView('workbench');
+  goToScreen('workbench');
   if (window.Workbench?.select) window.Workbench.select(key);
   else window.dispatchEvent(new CustomEvent('wb:select', { detail: { key } }));
 }
@@ -1055,7 +1211,7 @@ let officeKind = null;
 // The 3D office (three.js + models) is only fetched when someone picks it.
 // Until the new office has drawn a settled frame, show a loader instead of a
 // half-built scene.
-const officeEl = document.getElementById('office');
+const officeEl = document.getElementById('officeStage');
 function setLoading(on, text) {
   officeEl.classList.toggle('loading', on);
   if (text) document.getElementById('loaderText').textContent = text;
@@ -1210,6 +1366,20 @@ window.addEventListener('storage', (e) => {
 });
 applyLang(chooseLang(null));
 syncControls();
+// A fresh load starts at the office unless the URL names a screen; the old
+// localStorage view key is deliberately ignored.
+history.scrollRestoration = 'manual';
+{
+  const initial = SCREENS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'office';
+  navLock = Date.now() + 500;
+  setActiveScreen(initial);
+  requestAnimationFrame(() => {
+    measureBar();
+    if (!state.full) return;
+    const el = document.getElementById(initial);
+    if (el) pagerEl.scrollTop = pagerEl.scrollTop + el.getBoundingClientRect().top - pagerEl.getBoundingClientRect().top;
+  });
+}
 scenesReady.then(() => makeOffice());
 connect();
 
