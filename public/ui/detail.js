@@ -8,7 +8,11 @@
   const esc = (s) => (typeof window.esc === 'function'
     ? window.esc(s)
     : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
-  const t = (k) => (typeof L !== 'undefined' && L[k] != null ? L[k] : (window.I18N?.en?.[k] ?? k));
+  const t = (k) => {
+    const lang = typeof langCode !== 'undefined' ? langCode : 'en';
+    const dict = typeof L !== 'undefined' ? L : null;
+    return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
+  };
   const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
 
   const EV = {
@@ -122,11 +126,11 @@
       try { return ago(ts, now); } catch { /* fall through */ }
     }
     const s = Math.max(0, Math.round((now - ts) / 1000));
-    if (s < 45) return '现在';
+    if (s < 45) return t('justNow');
     const m = Math.round(s / 60);
-    if (m < 60) return `${m} 分钟前`;
+    if (m < 60) return t('minutesAgo')(m);
     const h = Math.round(m / 60);
-    return h < 24 ? `${h} 小时前` : `${Math.round(h / 24)} 天前`;
+    return h < 24 ? t('hoursAgo')(h) : t('daysAgo')(Math.round(h / 24));
   }
 
   // ---------- light markdown ----------
@@ -270,11 +274,11 @@
   }
 
   function typeLabel(m, isChild) {
-    if (m.role === 'user') return isChild ? '委派' : '提问';
-    if (m.role === 'thinking') return '思考';
-    if (m.role === 'tool') return '工具调用';
-    if (m.role === 'final') return m.isError ? '最终错误' : '最终答复';
-    return '回复';
+    if (m.role === 'user') return isChild ? t('typeDelegate') : t('typePrompt');
+    if (m.role === 'thinking') return t('typeThink');
+    if (m.role === 'tool') return t('typeTool');
+    if (m.role === 'final') return m.isError ? t('finalError') : t('finalAnswer');
+    return t('typeReply');
   }
 
   // Claude transcripts only carry a one-line description ("Bash: …"), so the
@@ -300,7 +304,7 @@
         <div class="dt-sticky">
           <header class="dt-head">
             <div class="dt-head-text">
-              <div class="dt-title-row"><span class="ui-chip dt-tag" hidden></span><span class="dt-orig" hidden>（无原文）</span><h1 class="dt-title"></h1></div>
+              <div class="dt-title-row"><span class="ui-chip dt-tag" hidden></span><span class="dt-orig" hidden>${esc(t('noOriginal'))}</span><h1 class="dt-title"></h1></div>
               <div class="dt-meta"></div>
             </div>
             <div class="dt-head-actions"></div>
@@ -308,10 +312,10 @@
           <div class="dt-strip"><div class="dt-strip-inner"></div></div>
           <div class="dt-tabs-row">
             <div class="ui-seg dt-tabs" role="group">
-              <button type="button" data-tab="all" aria-pressed="true">全程 <b class="ui-num"></b></button>
-              <button type="button" data-tab="tools" aria-pressed="false">工具 <b class="ui-num"></b></button>
-              <button type="button" data-tab="replies" aria-pressed="false">回复 <b class="ui-num"></b></button>
-              <button type="button" data-tab="images" aria-pressed="false">图片 <b class="ui-num"></b></button>
+              <button type="button" data-tab="all" aria-pressed="true">${esc(t('tabAll'))} <b class="ui-num"></b></button>
+              <button type="button" data-tab="tools" aria-pressed="false">${esc(t('tabTools'))} <b class="ui-num"></b></button>
+              <button type="button" data-tab="replies" aria-pressed="false">${esc(t('tabReplies'))} <b class="ui-num"></b></button>
+              <button type="button" data-tab="images" aria-pressed="false">${esc(t('tabImages'))} <b class="ui-num"></b></button>
             </div>
             <span class="dt-live-note"></span>
           </div>
@@ -365,17 +369,17 @@
     const items = [];
     items.push(`<span class="dt-m dt-m-fix"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`);
     if (s.agent) items.push(`<span class="dt-m dt-m-fix"><i>agent</i><span>${esc(agentLabel(s.agent))}</span></span>`);
-    if (master) items.push(`<span class="dt-m dt-m-flex"><i>派自</i><button type="button" class="dt-link" data-master-key="${esc(master.key)}" title="${esc(master.title || master.project || '')}">${esc(masterTitle(master))}</button></span>`);
+    if (master) items.push(`<span class="dt-m dt-m-flex"><i>${esc(t('masterFrom'))}</i><button type="button" class="dt-link" data-master-key="${esc(master.key)}" title="${esc(master.title || master.project || '')}">${esc(masterTitle(master))}</button></span>`);
     if (startOf(s)) {
-      items.push(`<span class="dt-m dt-m-fix"><i>开始</i><span class="ui-num">${hhmm(startOf(s))}</span></span>`);
-      items.push('<span class="dt-m dt-m-fix"><i>用时</i><span class="ui-num dt-dur"></span></span>');
+      items.push(`<span class="dt-m dt-m-fix"><i>${esc(t('metaStart'))}</i><span class="ui-num">${hhmm(startOf(s))}</span></span>`);
+      items.push(`<span class="dt-m dt-m-fix"><i>${esc(t('metaDuration'))}</i><span class="ui-num dt-dur"></span></span>`);
     }
-    if (s.effort) items.push(`<span class="dt-m dt-m-fix"><i>档位</i><span>${esc(s.effort)}</span></span>`);
+    if (s.effort) items.push(`<span class="dt-m dt-m-fix"><i>${esc(t('metaEffort'))}</i><span>${esc(s.effort)}</span></span>`);
     // The run summary only counts images seen in its 1 MB tail; the transcript
     // window is what the image tab can actually show, so prefer that once loaded.
     const transcriptImages = S.messages.reduce((n, m) => n + (Array.isArray(m.images) ? m.images.length : 0), 0);
     const images = S.loaded ? transcriptImages : (Number(s.images) || 0);
-    if (images) items.push(`<span class="dt-m dt-m-fix"><i>图片</i><span class="ui-num">${images}</span></span>`);
+    if (images) items.push(`<span class="dt-m dt-m-fix"><i>${esc(t('metaImages'))}</i><span class="ui-num">${images}</span></span>`);
     return items.join('');
   }
 
@@ -404,9 +408,9 @@
 
     const resume = typeof window.resumeCmd === 'function' ? window.resumeCmd(s) : '';
     const acts = [];
-    if (hasFinal()) acts.push('<button type="button" class="ui-btn dt-jump" data-jump-final>跳到最终答复</button>');
-    if (resume) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-resume="${esc(resume)}" title="复制续接命令" aria-label="复制续接命令">${COPY_ICON}</button>`);
-    if (s.cwd) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-cwd="${esc(s.cwd)}" title="复制工作目录" aria-label="复制工作目录">${FOLDER_ICON}</button>`);
+    if (hasFinal()) acts.push(`<button type="button" class="ui-btn dt-jump" data-jump-final>${esc(t('jumpFinal'))}</button>`);
+    if (resume) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-resume="${esc(resume)}" title="${esc(t('copyResume'))}" aria-label="${esc(t('copyResume'))}">${COPY_ICON}</button>`);
+    if (s.cwd) acts.push(`<button type="button" class="ui-btn dt-icon-btn" data-copy-cwd="${esc(s.cwd)}" title="${esc(t('copyCwd'))}" aria-label="${esc(t('copyCwd'))}">${FOLDER_ICON}</button>`);
     const asig = acts.join('');
     if (S.el.actions.dataset.sig !== asig) {
       S.el.actions.innerHTML = asig;
@@ -436,7 +440,7 @@
       S.el.children.dataset.sig = sig;
       S.el.children.hidden = !kids.length;
       if (kids.length) {
-        S.el.children.innerHTML = `<div class="dt-children-head">派出的子任务 · <span class="ui-num">${kids.length}</span></div>` + kids.map((k) => {
+        S.el.children.innerHTML = `<div class="dt-children-head">${esc(t('childrenHead'))} · <span class="ui-num">${kids.length}</span></div>` + kids.map((k) => {
           const kt = window.Workbench?.titleOf ? window.Workbench.titleOf(k) : { tag: '', title: k.title || '' };
           return `<button type="button" class="dt-child" data-child-key="${esc(k.key)}">
             <span class="ui-dot ${dotClass(k.status)}"></span>
@@ -473,8 +477,8 @@
     if (!Array.isArray(images) || !images.length) return '';
     return `<div class="dt-shots${cls ? ' ' + cls : ''}">${images.map((im, i) => {
       const url = shotUrl(key, im);
-      const cap = `${name || '工具'} · 图 ${i + 1}`;
-      return `<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="点开看大图"><img loading="lazy" src="${esc(url)}" alt=""></button>`;
+      const cap = t('imgCap')(name, i + 1);
+      return `<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="${esc(t('openImage'))}"><img loading="lazy" src="${esc(url)}" alt=""></button>`;
     }).join('')}</div>`;
   }
 
@@ -515,17 +519,17 @@
         const argLines = text.split('\n').length;
         const pre = `<pre class="dt-args">${esc(text)}</pre>`;
         html += argLines > 8 || text.length > 8 * 96
-          ? `<details class="dt-argfold"><summary>参数 · ${argLines} 行</summary>${pre}</details>`
+          ? `<details class="dt-argfold"><summary>${esc(t('argFold')(argLines))}</summary>${pre}</details>`
           : pre;
       }
       const resultText = m.result && typeof m.result.text === 'string' ? m.result.text : '';
       const images = Array.isArray(m.images) ? m.images : [];
       if (resultText || images.length) {
         const resLines = resultText ? resultText.split('\n').length : 0;
-        const title = resultText ? `结果 · ${resLines} 行` : `结果 · 图片 ${images.length}`;
+        const title = resultText ? t('resultFold')(resLines) : t('resultImages')(images.length);
         html += `<details class="dt-result"><summary>${esc(title)}</summary>${resultText ? `<pre class="dt-result-pre">${esc(resultText)}</pre>` : ''}${shotGrid(images, m.name, s.key)}</details>`;
       }
-      if (!html) html = '<div class="dt-note-inline">没有参数或结果</div>';
+      if (!html) html = `<div class="dt-note-inline">${esc(t('noArgResult'))}</div>`;
       body.innerHTML = html;
     } else if (kind === 'final') {
       body.innerHTML = `<div class="dt-final${m.isError ? ' is-error' : ''}"><div class="dt-final-text md">${renderMd(text)}</div></div>`;
@@ -558,12 +562,16 @@
     S.el.sum.hidden = !show;
     if (!show) return;
     const m = S.messages[fi];
-    const text = String(m.text || '');
-    const sig = `${text.length}|${text.slice(0, 64)}|${!!m.isError}`;
+    const all = String(m.text || '').replace(/\r\n?/g, '\n').split('\n');
+    let from = 0;
+    while (from < all.length && !all[from].trim()) from++;
+    const preview = all.slice(from, from + 6).join('\n');
+    const clipped = all.slice(from + 6).some((line) => line.trim());
+    const sig = `${preview.length}|${preview.slice(0, 64)}|${clipped}|${!!m.isError}`;
     if (S.el.sum.dataset.sig === sig) return;
     S.el.sum.dataset.sig = sig;
     S.el.sum.classList.toggle('is-error', !!m.isError);
-    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? '最终错误' : '最终答复'}</span><button type="button" class="dt-link" data-jump-final>跳到全文</button></div><div class="dt-sum-text md">${renderMd(text)}</div>`;
+    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? t('finalError') : t('finalAnswer')}</span><button type="button" class="dt-link" data-jump-final>${t('jumpFull')}</button></div><div class="dt-sum-text md${clipped ? ' is-clipped' : ''}">${renderMd(preview)}</div>`;
   }
 
   // ---------- tabs, counts, images ----------
@@ -588,15 +596,15 @@
       if (!Array.isArray(m.images) || !m.images.length) continue;
       for (let i = 0; i < m.images.length; i++) {
         const url = shotUrl(key, m.images[i]);
-        const cap = `${m.name || '工具'} · 图 ${i + 1}`;
-        items.push(`<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="点开看大图"><img loading="lazy" src="${esc(url)}" alt=""></button>`);
+        const cap = t('imgCap')(m.name, i + 1);
+        items.push(`<button type="button" class="dt-shot" data-shot="${esc(url)}" data-cap="${esc(cap)}" title="${esc(t('openImage'))}"><img loading="lazy" src="${esc(url)}" alt=""></button>`);
       }
     }
     S.el.imgrid.hidden = S.tab !== 'images';
     const html = items.join('');
     if (S.el.imgrid.dataset.sig !== html) {
       S.el.imgrid.dataset.sig = html;
-      S.el.imgrid.innerHTML = items.length ? html : '<div class="dt-note-inline">这次任务没有图片</div>';
+      S.el.imgrid.innerHTML = items.length ? html : `<div class="dt-note-inline">${esc(t('noImages'))}</div>`;
     }
   }
 
@@ -818,7 +826,7 @@
   function updateLiveNote() {
     if (!S.el) return;
     const live = S.session && LIVE.has(S.session.status);
-    S.el.liveNote.textContent = live ? (S.nearBottom ? '进行中 · 自动跟随' : '进行中 · 已暂停跟随') : '';
+    S.el.liveNote.textContent = live ? (S.nearBottom ? t('liveFollow') : t('livePaused')) : '';
   }
 
   function ensurePill() {
@@ -850,7 +858,7 @@
   function showPill() {
     const b = ensurePill();
     b.hidden = !S.newCount;
-    if (S.newCount) b.textContent = `↓ ${S.newCount} 条新消息`;
+    if (S.newCount) b.textContent = t('newMessages')(S.newCount);
     positionPill();
   }
 
@@ -895,7 +903,7 @@
       try { ok = document.execCommand('copy'); } catch { ok = false; }
       ta.remove();
     }
-    toast(ok ? '已复制' : '复制失败');
+    toast(ok ? t('copied') : t('copyFailed'));
   }
 
   function onScroll() {
@@ -1015,9 +1023,9 @@
 
   function esMasterTitle(s) {
     const master = findMaster(s);
-    if (!master) return '—';
+    if (!master) return '';
     const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(master) : { title: master.title || '' };
-    return clip(ti.title || master.project || master.agent || '', 24) || '—';
+    return clip(ti.title || master.project || master.agent || '', 24);
   }
 
   function esCard(s, now) {
@@ -1026,18 +1034,19 @@
     const second = window.Workbench?.secondLine ? window.Workbench.secondLine(s, ti) : { text: s.activity || '', mono: true };
     const need = st === 'waiting' || st === 'error';
     const color = st === 'waiting' ? '--st-waiting' : '--st-error';
-    const orig = ti.fromReply ? '<span class="wb-es-note">（无原文）</span>' : '';
+    const orig = ti.fromReply ? `<span class="wb-es-note">${t('noOriginal')}</span>` : '';
+    const from = esMasterTitle(s);
     return `<button type="button" class="wb-es-card${need ? ' is-need' : ''}" data-es-key="${esc(s.key)}"${need ? ` style="--es-s:var(${color})"` : ''}>
       <span class="wb-es-top"><span class="ui-dot ${dotClass(st)}"></span>${ti.tag ? `<span class="ui-chip wb-es-tag">${esc(ti.tag)}</span>` : ''}<span class="wb-es-time ui-num" data-es-dur="${esc(s.key)}">${esc(durText(s, now))}</span></span>
       <span class="wb-es-name">${orig}${esc(ti.title || s.project || s.agent || '')}</span>
       <span class="wb-es-act${second.mono ? ' is-mono' : ''}" data-es-act="${esc(s.key)}">${esc(second.text || '')}</span>
-      <span class="wb-es-from">派自 ${esc(esMasterTitle(s))}</span>
+      ${from ? `<span class="wb-es-from">${t('masterFrom')} ${esc(from)}</span>` : ''}
     </button>`;
   }
 
   function esRecent(s, now) {
     const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { title: s.title || '' };
-    const orig = ti.fromReply ? '<span class="wb-es-note">（无原文）</span>' : '';
+    const orig = ti.fromReply ? `<span class="wb-es-note">${t('noOriginal')}</span>` : '';
     return `<button type="button" class="wb-es-row" data-es-key="${esc(s.key)}">
       <span class="ui-dot st-done"></span>
       <span class="wb-es-row-title">${orig}${esc(ti.title || s.project || s.agent || '')}</span>
@@ -1048,30 +1057,30 @@
   function emptyState(box, now) {
     const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     const rank = (s) => (s.status === 'waiting' ? 0 : s.status === 'error' ? 1 : ES_ACTIVE.has(s.status) ? 2 : 9);
-    const todo = sessions
+    const todoAll = sessions
       .filter((s) => rank(s) < 9)
-      .sort((a, b) => rank(a) - rank(b) || (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0))
-      .slice(0, 4);
+      .sort((a, b) => rank(a) - rank(b) || (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0));
+    const todo = todoAll.slice(0, 4);
     const recent = sessions
       .filter((s) => s.status === 'done')
       .sort((a, b) => (Number(b.lastEventAt) || 0) - (Number(a.lastEventAt) || 0))
       .slice(0, 5);
-    const sig = todo.map((s) => `${s.key}:${s.status}`).join(',') + '|' + recent.map((s) => s.key).join(',');
+    const sig = todoAll.map((s) => `${s.key}:${s.status}`).join(',') + '|' + recent.map((s) => s.key).join(',') + '|' + (typeof langCode !== 'undefined' ? langCode : '');
     if (box.dataset.esSig === sig && box.querySelector('.wb-es')) {
       tickEmpty(now);
       return;
     }
     box.dataset.esSig = sig;
     box.dataset.html = '';
-    if (!todo.length && !recent.length) {
-      box.innerHTML = '<div class="wb-es-quiet"><span class="wb-es-seal" aria-hidden="true"></span><p>现在很安静，还没有任务。</p></div>';
+    if (!todoAll.length && !recent.length) {
+      box.innerHTML = `<div class="wb-es-quiet"><span class="wb-es-seal" aria-hidden="true"></span><p>${t('wbQuiet')}</p></div>`;
       return;
     }
-    const todoHtml = todo.length
-      ? `<section class="wb-es-sec"><h3 class="wb-es-h">进行中 <span class="ui-num">${todo.length}</span></h3><div class="wb-es-grid">${todo.map((s) => esCard(s, now)).join('')}</div></section>`
+    const todoHtml = todoAll.length
+      ? `<section class="wb-es-sec"><h3 class="wb-es-h">${t('wbActive')} <span class="ui-num">${todoAll.length}</span></h3><div class="wb-es-grid">${todo.map((s) => esCard(s, now)).join('')}</div>${todoAll.length > todo.length ? `<button type="button" class="wb-es-more" data-es-more>${t('wbMore')(todoAll.length - todo.length)}</button>` : ''}</section>`
       : '';
     const recentHtml = recent.length
-      ? `<section class="wb-es-sec"><h3 class="wb-es-h">最近完成</h3><div class="wb-es-recent">${recent.map((s) => esRecent(s, now)).join('')}</div></section>`
+      ? `<section class="wb-es-sec"><h3 class="wb-es-h">${t('wbRecentDone')}</h3><div class="wb-es-recent">${recent.map((s) => esRecent(s, now)).join('')}</div></section>`
       : '';
     box.innerHTML = `<div class="wb-es">${todoHtml}${recentHtml}</div>`;
     tickEmpty(now);
@@ -1182,6 +1191,8 @@
     const box = document.getElementById('wbDetail');
     if (!box) return;
     box.addEventListener('click', (e) => {
+      const more = e.target.closest('[data-es-more]');
+      if (more) { window.dispatchEvent(new CustomEvent('wb:filter', { detail: { filter: 'working' } })); return; }
       const pick = e.target.closest('[data-es-key]');
       if (pick) { window.Workbench?.select?.(pick.dataset.esKey); return; }
       const tabBtn = e.target.closest('.dt-tabs [data-tab]');
@@ -1219,6 +1230,7 @@
   window.WbDetail = {
     render,
     clear,
+    onLang: () => { if (S.key) S.key = null; S.el = null; },
     jumpToFinal,
     jumpToBlock,
     convo: () => ({ key: S.key, messages: S.messages, loaded: S.loaded }),

@@ -138,7 +138,7 @@ function snapshot(watcher, opts) {
   return { now, lang: opts.demo ? null : promptLanguage(raw), sessions, summary: summary(sessions, now) };
 }
 
-function createServer(watcher, opts, { onShutdown, onRestart } = {}) {
+function createServer(watcher, opts, { onShutdown } = {}) {
   const clients = new Set();
   let last = '';
 
@@ -232,22 +232,8 @@ function createServer(watcher, opts, { onShutdown, onRestart } = {}) {
       for (const c of clients) c.end();
       setTimeout(onShutdown, 50);
     } else if (url.pathname === '/api/version') {
-      updater.checkLatest().finally(() => {
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-        res.end(JSON.stringify(updater.info()));
-      });
-    } else if (url.pathname === '/api/update' && req.method === 'POST') {
-      // Same guard as shutdown: web pages can't send this header cross-site.
-      if (req.headers['x-whatsmyagentdoing'] !== 'update') { res.writeHead(403).end(); return; }
-      updater.update().then(
-        (version) => {
-          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ ok: true, version }));
-          for (const c of clients) c.end();
-          if (onRestart) setTimeout(onRestart, 100);
-        },
-        (e) => { res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, error: String(e.message || e) })); },
-      );
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ version: updater.localVersion() }));
     } else if (url.pathname === '/api/ping') {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ app: 'whatsmyagentdoing' }));

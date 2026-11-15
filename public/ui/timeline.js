@@ -6,6 +6,11 @@
   'use strict';
 
   const esc = (s) => (typeof window.esc === 'function' ? window.esc(s) : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+  const t = (k) => {
+    const lang = typeof langCode !== 'undefined' ? langCode : 'en';
+    const dict = typeof L !== 'undefined' ? L : null;
+    return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
+  };
   const WB = () => window.Workbench;
   const nowMs = () => Date.now() - (typeof state !== 'undefined' ? (state.skew || 0) : 0);
 
@@ -22,21 +27,17 @@
   };
   const EV_CLASS = { t: 'ev-t', s: 'ev-s', f: 'ev-f', e: 'ev-e' };
   const EV_PRIO = { t: 0, s: 1, f: 2, e: 3 };
-  const STATUS_ZH = {
-    thinking: '思考中', tool: '执行中', typing: '回复中', waiting: '需要你',
-    done: '已完成', error: '出错', interrupted: '中断', idle: '待命',
-  };
   const RANGES = [
-    { key: '1h', label: '1 小时', ms: 3600e3 },
-    { key: '3h', label: '3 小时', ms: 3 * 3600e3 },
-    { key: '12h', label: '12 小时', ms: 12 * 3600e3 },
-    { key: 'all', label: '全部', ms: 0 },
+    { key: '1h', i18n: 'tlRange1h', ms: 3600e3 },
+    { key: '3h', i18n: 'tlRange3h', ms: 3 * 3600e3 },
+    { key: '12h', i18n: 'tlRange12h', ms: 12 * 3600e3 },
+    { key: 'all', i18n: 'tlRangeAll', ms: 0 },
   ];
   const RANGE_KEYS = new Set(RANGES.map((r) => r.key));
   const ROW_H = 28;
 
   const dotClass = (st) => (st === 'idle' ? 'st-interrupted' : `st-${st || 'interrupted'}`);
-  const statusLabel = (st) => (typeof L !== 'undefined' && L[st]) || STATUS_ZH[st] || st;
+  const statusLabel = (st) => (typeof L !== 'undefined' && L[st]) || st;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   // Bar durations sit at 6px from the left edge; ticks under that text are
@@ -133,21 +134,21 @@
       <div class="tl-view">
         <div class="tl-top">
           <div class="tl-legend" aria-hidden="true">
-            <span><i class="tl-lg" style="--ev:var(--ev-tool)"></i>工具</span>
-            <span><i class="tl-lg" style="--ev:var(--ev-say)"></i>回复</span>
-            <span><i class="tl-lg" style="--ev:var(--ev-final)"></i>最终</span>
-            <span><i class="tl-lg" style="--ev:var(--ev-error)"></i>错误</span>
+            <span><i class="tl-lg" style="--ev:var(--ev-tool)"></i>${esc(t('tlTools'))}</span>
+            <span><i class="tl-lg" style="--ev:var(--ev-say)"></i>${esc(t('tlReplies'))}</span>
+            <span><i class="tl-lg" style="--ev:var(--ev-final)"></i>${esc(t('tlFinal'))}</span>
+            <span><i class="tl-lg" style="--ev:var(--ev-error)"></i>${esc(t('tlErrors'))}</span>
           </div>
           <div class="tl-actions">
-            <div class="ui-seg tl-range" id="tlRange" role="group" aria-label="时间范围">
-              ${RANGES.map((r) => `<button type="button" data-range="${r.key}">${esc(r.label)}</button>`).join('')}
+            <div class="ui-seg tl-range" id="tlRange" role="group" aria-label="${esc(t('tlRangeAria'))}">
+              ${RANGES.map((r) => `<button type="button" data-range="${r.key}">${esc(t(r.i18n))}</button>`).join('')}
             </div>
-            <button type="button" class="ui-btn tl-reset" id="tlReset" hidden>重置</button>
+            <button type="button" class="ui-btn tl-reset" id="tlReset" hidden>${esc(t('tlReset'))}</button>
           </div>
         </div>
         <div class="tl-stage" id="tlStage">
           <div class="tl-head">
-            <div class="tl-head-label"><span class="tl-cap">并发</span><span class="tl-peak ui-num" id="tlPeak"></span></div>
+            <div class="tl-head-label"><span class="tl-cap">${esc(t('tlConcurrency'))}</span><span class="tl-peak ui-num" id="tlPeak"></span></div>
             <div class="tl-head-track" id="tlHeadTrack">
               <svg class="tl-band" id="tlBand" height="36" preserveAspectRatio="none" aria-hidden="true"></svg>
               <div class="tl-ruler" id="tlRuler"></div>
@@ -156,11 +157,11 @@
           <div class="tl-body" id="tlBody">
             <div class="tl-groups" id="tlGroups"></div>
             <div class="tl-empty" id="tlEmpty" hidden>
-              <p class="tl-empty-text">这个范围里没有任务</p>
-              <button type="button" class="ui-btn" data-tl-12>切到 12 小时</button>
+              <p class="tl-empty-text">${esc(t('tlNoTasks'))}</p>
+              <button type="button" class="ui-btn" data-tl-12>${esc(t('tlSwitch12'))}</button>
             </div>
           </div>
-          <div class="tl-now" id="tlNow" hidden><span class="tl-now-lab">现在</span><i class="tl-now-tri"></i></div>
+          <div class="tl-now" id="tlNow" hidden><span class="tl-now-lab">${esc(t('tlNow'))}</span><i class="tl-now-tri"></i></div>
         </div>
       </div>`;
 
@@ -278,7 +279,7 @@
     el.className = 'tl-row';
     el.setAttribute('role', 'button');
     el.tabIndex = -1;
-    el.innerHTML = '<div class="tl-label"><span class="ui-dot st-interrupted"></span><span class="ui-chip tl-tag" hidden></span><span class="tl-note" hidden>（无原文）</span><span class="tl-title"></span></div><div class="tl-track"><div class="tl-bar"><span class="tl-ticks"></span><span class="tl-dur ui-num"></span></div></div>';
+    el.innerHTML = `<div class="tl-label"><span class="ui-dot st-interrupted"></span><span class="ui-chip tl-tag" hidden></span><span class="tl-note" hidden>${esc(t('noOriginal'))}</span><span class="tl-title"></span></div><div class="tl-track"><div class="tl-bar"><span class="tl-ticks"></span><span class="tl-dur ui-num"></span></div></div>`;
     return {
       el,
       key: null,
@@ -350,7 +351,7 @@
       entry.tagEl.hidden = !ti.tag;
       entry.tag = ti.tag;
     }
-    const note = ti.fromReply ? '（无原文）' : '';
+    const note = ti.fromReply ? t('noOriginal') : '';
     if (entry.note !== note) {
       entry.noteEl.textContent = note;
       entry.noteEl.hidden = !note;
@@ -404,7 +405,7 @@
   function updateGroup(entry, g, rows, now, collapsed) {
     const master = g.kind === 'master';
     const ti = master ? WB().titleOf(g.master) : null;
-    const title = master ? ti.title : (g.kind === 'other' ? '其他会话' : '未归属');
+    const title = master ? ti.title : (g.kind === 'other' ? t('wbOther') : t('wbUnassigned'));
     if (entry.title !== title) {
       entry.titleEl.textContent = title;
       entry.titleEl.title = title;
@@ -507,7 +508,7 @@
       count += d;
       if (count > peak) peak = count;
     }
-    peakEl.textContent = peak ? `峰值 ${peak}` : '';
+    peakEl.textContent = peak ? t('tlPeak')(peak) : '';
     bandEl.setAttribute('viewBox', `0 0 ${w} ${H}`);
     if (!evs.length) {
       bandEl.innerHTML = `<line class="tl-baseline" x1="0" y1="${bottom}" x2="${w}" y2="${bottom}"/>`;
@@ -541,7 +542,7 @@
     groupsEl.hidden = isEmpty;
     emptyEl.hidden = !isEmpty;
     if (!isEmpty) return;
-    const msg = sessionCount ? '这个范围里没有任务' : '还没有会话数据';
+    const msg = sessionCount ? t('tlNoTasks') : t('tlNoData');
     if (emptyTextEl.textContent !== msg) emptyTextEl.textContent = msg;
   }
 
@@ -732,9 +733,9 @@
     const dur = WB().fmtDur(Math.max(0, end - start));
     tipEl.innerHTML = `
       <div class="tl-tip-title">${esc(ti.title || key)}</div>
-      <div class="tl-tip-meta"><span class="ui-dot ${dotClass(st)}"></span><span>${esc(statusLabel(st))}</span><span class="tl-tip-sep">·</span><span>档位 ${esc(s.effort || '—')}</span></div>
-      <div class="tl-tip-kv"><span>开始 <b class="ui-num">${start ? fmtClock(start, true) : '—'}</b></span><span>用时 <b class="ui-num">${dur}</b></span></div>
-      <div class="tl-tip-act"><span class="tl-tip-cap">最近动作</span>${esc(clip(second.text, 110) || '—')}</div>`;
+      <div class="tl-tip-meta"><span class="ui-dot ${dotClass(st)}"></span><span>${esc(statusLabel(st))}</span><span class="tl-tip-sep">·</span><span>${esc(t('tlEffort'))} ${esc(s.effort || '—')}</span></div>
+      <div class="tl-tip-kv"><span>${esc(t('tlStart'))} <b class="ui-num">${start ? fmtClock(start, true) : '—'}</b></span><span>${esc(t('tlDuration'))} <b class="ui-num">${dur}</b></span></div>
+      <div class="tl-tip-act"><span class="tl-tip-cap">${esc(t('tlRecentAction'))}</span>${esc(clip(second.text, 110) || '—')}</div>`;
     tipEl.hidden = false;
   }
 
@@ -929,6 +930,34 @@
     schedule();
   }
 
-  window.Timeline = { init, render: schedule, onLang: schedule };
+  function syncLabels() {
+    const tl = document.getElementById('tl');
+    if (!tl) return;
+    const keys = ['tlTools', 'tlReplies', 'tlFinal', 'tlErrors'];
+    tl.querySelectorAll('.tl-legend > span').forEach((el, i) => {
+      const icon = el.querySelector('i');
+      el.textContent = '';
+      if (icon) el.appendChild(icon);
+      el.appendChild(document.createTextNode(t(keys[i])));
+    });
+    tl.querySelectorAll('#tlRange button').forEach((b) => {
+      const r = RANGES.find((x) => x.key === b.dataset.range);
+      if (r) b.textContent = t(r.i18n);
+    });
+    const range = tl.querySelector('#tlRange');
+    if (range) range.setAttribute('aria-label', t('tlRangeAria'));
+    const reset = tl.querySelector('#tlReset');
+    if (reset) reset.textContent = t('tlReset');
+    const cap = tl.querySelector('.tl-cap');
+    if (cap) cap.textContent = t('tlConcurrency');
+    const empty = tl.querySelector('.tl-empty-text');
+    if (empty) empty.textContent = t('tlNoTasks');
+    const sw = tl.querySelector('[data-tl-12]');
+    if (sw) sw.textContent = t('tlSwitch12');
+    const now = tl.querySelector('.tl-now-lab');
+    if (now) now.textContent = t('tlNow');
+  }
+
+  window.Timeline = { init, render: schedule, onLang: () => { syncLabels(); schedule(); } };
   init();
 })();

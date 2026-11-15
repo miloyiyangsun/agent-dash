@@ -7,6 +7,11 @@
   const esc = (s) => (typeof window.esc === 'function'
     ? window.esc(s)
     : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+  const t = (k) => {
+    const lang = typeof langCode !== 'undefined' ? langCode : 'en';
+    const dict = typeof L !== 'undefined' ? L : null;
+    return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
+  };
   const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
   const WRITE = new Set(['Write']);
   const EDIT = new Set(['Edit', 'MultiEdit', 'NotebookEdit']);
@@ -63,11 +68,11 @@
       try { return ago(ts, now); } catch { /* fall through */ }
     }
     const s = Math.max(0, Math.round((now - ts) / 1000));
-    if (s < 45) return '现在';
+    if (s < 45) return t('justNow');
     const m = Math.round(s / 60);
-    if (m < 60) return `${m} 分钟前`;
+    if (m < 60) return t('minutesAgo')(m);
     const h = Math.round(m / 60);
-    return h < 24 ? `${h} 小时前` : `${Math.round(h / 24)} 天前`;
+    return h < 24 ? t('hoursAgo')(h) : t('daysAgo')(Math.round(h / 24));
   }
 
   function fmtTokens(n) {
@@ -129,23 +134,23 @@
     box.innerHTML = `
       <div class="as">
         <section class="as-sec" data-global>
-          <h3 class="as-title">今天</h3>
+          <h3 class="as-title">${esc(t('asToday'))}</h3>
           <dl class="as-kv as-today"></dl>
         </section>
         <section class="as-sec" data-global>
-          <h3 class="as-title">最近完成</h3>
+          <h3 class="as-title">${esc(t('asRecentDone'))}</h3>
           <div class="as-recent"></div>
         </section>
         <section class="as-sec" data-task hidden>
-          <h3 class="as-title">属性</h3>
+          <h3 class="as-title">${esc(t('asProps'))}</h3>
           <dl class="as-kv as-props"></dl>
         </section>
         <section class="as-sec" data-task data-files hidden>
-          <h3 class="as-title">改过的文件 <span class="as-count ui-num"></span></h3>
+          <h3 class="as-title">${esc(t('asChangedFiles'))} <span class="as-count ui-num"></span></h3>
           <div class="as-files"></div>
         </section>
         <section class="as-sec" data-task data-imgs hidden>
-          <h3 class="as-title">图片 <span class="as-count ui-num"></span></h3>
+          <h3 class="as-title">${esc(t('asImages'))} <span class="as-count ui-num"></span></h3>
           <div class="as-grid"></div>
         </section>
       </div>`;
@@ -175,39 +180,39 @@
   // ---------- properties ----------
 
   function lineHtml(value, label) {
-    return `<span class="as-line"><span class="as-path" title="${esc(value)}">${esc(value)}</span><button type="button" class="as-copy" data-as-copy="${esc(value)}" title="复制${esc(label)}" aria-label="复制${esc(label)}">${COPY_ICON}</button></span>`;
+    return `<span class="as-line"><span class="as-path" title="${esc(value)}">${esc(value)}</span><button type="button" class="as-copy" data-as-copy="${esc(value)}" title="${esc(t('copyWithLabel')(label))}" aria-label="${esc(t('copyWithLabel')(label))}">${COPY_ICON}</button></span>`;
   }
 
   function propRows(s) {
     const st = s.status || 'idle';
     const rows = [];
-    rows.push(['状态', `<span class="as-status"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`]);
+    rows.push([t('propStatus'), `<span class="as-status"><span class="ui-dot ${dotClass(st)}"></span><b class="${st === 'thinking' ? 'ui-shimmer' : ''}" style="color:${statusColor(st)}">${esc(L[st] || st)}</b></span>`]);
     if (s.agent) rows.push(['agent', `<span>${esc(agentLabel(s.agent))}</span>`]);
     const master = findMaster(s);
     if (master) {
       const mt = titleOf(master).title || master.project || master.agent || '';
-      rows.push(['派自', `<button type="button" class="dt-link as-master" data-master-key="${esc(master.key)}" title="${esc(mt)}">${esc(mt)}</button>`]);
+      rows.push([t('propFrom'), `<button type="button" class="dt-link as-master" data-master-key="${esc(master.key)}" title="${esc(mt)}">${esc(mt)}</button>`]);
     }
-    rows.push(['开始', `<span class="ui-num">${startOf(s) ? stamp(startOf(s)) : '—'}</span>`]);
+    rows.push([t('propStart'), `<span class="ui-num">${startOf(s) ? stamp(startOf(s)) : '—'}</span>`]);
     const live = LIVE.has(s.status);
     const end = live ? 0 : (Number(s.lastEventAt) || 0);
-    rows.push(['结束', `<span class="ui-num">${end ? stamp(end) : '—'}</span>`]);
-    rows.push(['用时', `<span class="ui-num as-dur">${durText(s, Date.now() - (state.skew || 0))}</span>`]);
-    rows.push(['模型', s.model ? `<span class="as-mono">${esc(s.model)}</span>` : '<span class="as-dash">—</span>']);
-    rows.push(['档位', s.effort ? `<span>${esc(s.effort)}</span>` : '<span class="as-dash">—</span>']);
-    rows.push(['轮数', Number.isFinite(s.turns) && s.turns ? `<span class="ui-num">${s.turns}</span>` : '<span class="as-dash">—</span>']);
-    if (s.thinkingTokens) rows.push(['思考 token', `<span class="ui-num">${fmtTokens(s.thinkingTokens)}</span>`]);
-    if (s.cwd) rows.push(['工作目录', lineHtml(s.cwd, '工作目录')]);
+    rows.push([t('propEnd'), `<span class="ui-num">${end ? stamp(end) : '—'}</span>`]);
+    rows.push([t('propDuration'), `<span class="ui-num as-dur">${durText(s, Date.now() - (state.skew || 0))}</span>`]);
+    rows.push([t('propModel'), s.model ? `<span class="as-mono">${esc(s.model)}</span>` : '<span class="as-dash">—</span>']);
+    rows.push([t('propEffort'), s.effort ? `<span>${esc(s.effort)}</span>` : '<span class="as-dash">—</span>']);
+    rows.push([t('propTurns'), Number.isFinite(s.turns) && s.turns ? `<span class="ui-num">${s.turns}</span>` : '<span class="as-dash">—</span>']);
+    if (s.thinkingTokens) rows.push([t('propThinkingTokens'), `<span class="ui-num">${fmtTokens(s.thinkingTokens)}</span>`]);
+    if (s.cwd) rows.push([t('propCwd'), lineHtml(s.cwd, t('propCwd'))]);
     const resume = typeof window.resumeCmd === 'function' ? window.resumeCmd(s) : '';
-    if (resume) rows.push(['续接命令', lineHtml(resume, '续接命令')]);
-    if (s.agent === 'deepseek' && s.run) rows.push(['run 文件', `<span class="as-mono">${esc(s.run)}.jsonl</span>`]);
+    if (resume) rows.push([t('propResume'), lineHtml(resume, t('propResume'))]);
+    if (s.agent === 'deepseek' && s.run) rows.push([t('propRunFile'), `<span class="as-mono">${esc(s.run)}.jsonl</span>`]);
     return rows;
   }
 
   function renderProps(s, now) {
     if (!S.el) return;
     const rows = propRows(s);
-    const sig = rows.map((r) => r[0] + '\u0000' + (r[0] === '用时' ? '' : r[1])).join('\u0001');
+    const sig = rows.map((r) => r[0] + '\u0000' + (r[0] === t('propDuration') ? '' : r[1])).join('\u0001');
     if (S.propSig !== sig) {
       S.propSig = sig;
       S.el.props.innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
@@ -239,10 +244,10 @@
       if (hit) {
         hit.count += 1;
         hit.idx = idx;
-        hit.action = isWrite ? '写' : '改';
+        hit.action = isWrite ? t('fileWrite') : t('fileEdit');
         hit.path = p;
       } else {
-        map.set(key, { path: p, action: isWrite ? '写' : '改', count: 1, idx });
+        map.set(key, { path: p, action: isWrite ? t('fileWrite') : t('fileEdit'), count: 1, idx });
       }
     });
     return [...map.values()].sort((a, b) => b.idx - a.idx);
@@ -255,7 +260,7 @@
         <span class="as-file-name">${esc(baseOf(f.path))}</span>
         ${dir ? `<span class="as-file-dir">${esc(dir)}</span>` : ''}
       </span>
-      <span class="as-pill ${f.action === '写' ? 'is-write' : 'is-edit'}">${f.action}</span>
+      <span class="as-pill ${f.action === t('fileWrite') ? 'is-write' : 'is-edit'}">${f.action}</span>
       <span class="as-file-count ui-num">${f.count}</span>
     </button>`;
   }
@@ -272,7 +277,7 @@
         ? '<div class="as-skel" aria-hidden="true"><i style="width:88%"></i><i style="width:72%"></i><i style="width:81%"></i></div>'
         : files.length
           ? files.map(fileRow).join('')
-          : '<div class="as-note">没有改动文件</div>';
+          : `<div class="as-note">${esc(t('asNoFiles'))}</div>`;
     }
   }
 
@@ -285,7 +290,7 @@
       m.images.forEach((im, i) => {
         out.push({
           url: `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`,
-          cap: `${m.name || '工具'} · 图 ${i + 1}`,
+          cap: t('imgCap')(m.name, i + 1),
         });
       });
     }
@@ -300,7 +305,7 @@
     if (S.imgSig !== sig) {
       S.imgSig = sig;
       S.el.imgCount.textContent = String(images.length);
-      S.el.grid.innerHTML = images.map((x) => `<button type="button" class="as-shot" data-shot="${esc(x.url)}" data-cap="${esc(x.cap)}" title="点开看大图"><img loading="lazy" src="${esc(x.url)}" alt=""></button>`).join('');
+      S.el.grid.innerHTML = images.map((x) => `<button type="button" class="as-shot" data-shot="${esc(x.url)}" data-cap="${esc(x.cap)}" title="${esc(t('openImage'))}"><img loading="lazy" src="${esc(x.url)}" alt=""></button>`).join('');
     }
     S.el.imgSec.hidden = !images.length;
   }
@@ -322,10 +327,10 @@
       if (end > start) { total += end - start; n++; }
     }
     const rows = [
-      ['任务数', `<span class="ui-num">${today.length}</span>`],
-      ['完成数', `<span class="ui-num">${done}</span>`],
-      ['出错数', `<span class="ui-num">${errors}</span>`],
-      ['平均用时', `<span class="ui-num">${n ? fmtDur(total / n) : '—'}</span>`],
+      [t('asTasks'), `<span class="ui-num">${today.length}</span>`],
+      [t('asDone'), `<span class="ui-num">${done}</span>`],
+      [t('asErrors'), `<span class="ui-num">${errors}</span>`],
+      [t('asAvgDuration'), `<span class="ui-num">${n ? fmtDur(total / n) : '—'}</span>`],
     ];
     const recent = sessions
       .filter((s) => s.status === 'done')
@@ -345,7 +350,7 @@
             <span class="as-file-dir">${esc(sub)}</span>
           </span>
         </button>`;
-      }).join('') : '<div class="as-note">今天还没有完成的任务</div>';
+      }).join('') : `<div class="as-note">${esc(t('asNoDoneToday'))}</div>`;
     }
   }
 
@@ -381,7 +386,7 @@
       toastEl.style.left = `${r.left + r.width / 2}px`;
       toastEl.style.top = `${r.bottom - 40}px`;
     }
-    toastEl.textContent = ok ? '已复制' : '复制失败';
+    toastEl.textContent = ok ? t('copied') : t('copyFailed');
     toastEl.classList.add('on');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('on'), 1500);
@@ -445,6 +450,6 @@
     render(null);
   }
 
-  window.WbAside = { render, debug: () => ({ key: S.key, propSig: S.propSig, filesSig: S.filesSig, imgSig: S.imgSig }) };
+  window.WbAside = { render, onLang: () => { S.el = null; S.propSig = S.filesSig = S.imgSig = S.globalSig = null; }, debug: () => ({ key: S.key, propSig: S.propSig, filesSig: S.filesSig, imgSig: S.imgSig }) };
   init();
 })();

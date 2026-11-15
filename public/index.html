@@ -17,30 +17,22 @@
   .wrap { max-width: 1180px; margin: 0 auto; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 24px; margin-bottom: 16px; }
   h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
-  h1 span { color: var(--ink); font-weight: 600; }
-  .summary { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 0; font-size: 12px; color: var(--muted); }
-  .chip b { color: var(--ink); font-weight: 600; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
-  .controls { position: relative; width: 100%; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding-top: 14px; border-top: 1px solid var(--line); }
-  .seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
-  .seg button { border: 0; background: none; color: var(--muted); padding: 5px 12px; border-radius: 5px; font: inherit; font-size: 12.5px; cursor: pointer; }
-  .seg button:hover:not(.on) { color: var(--ink); background: var(--bg); }
-  .seg button.on { background: var(--ink); color: var(--bg); }
-  .seg button small { opacity: .65; font-size: 11px; }
+  .agent-logo { width: 20px; height: 20px; object-fit: contain; padding: 1px; flex: none; }
+  @media (prefers-color-scheme: dark) {
+    .agent-logo.mono { filter: invert(1); }
+  }
   label.tog { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none; }
   .btn { border: 1px solid var(--line); background: var(--panel); color: var(--muted); padding: 5px 11px; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .btn:hover { color: var(--ink); border-color: var(--faint); }
   button:focus-visible, select:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--tool); outline-offset: 3px; }
-  .toolbar-space { flex: 1; }
-  .controls > .btn, .settings > summary { min-height: 36px; display: inline-flex; align-items: center; white-space: nowrap; }
+  .settings > summary { min-height: 36px; display: inline-flex; align-items: center; white-space: nowrap; }
   .settings > summary { list-style: none; gap: 7px; color: var(--ink); }
   .settings > summary::-webkit-details-marker { display: none; }
   /* A drawn chevron sits on the text's centre line; the ⌄ glyph hangs below it in most fonts. */
   .settings > summary::after { content: ""; flex: none; width: 6px; height: 6px; margin: -3px 1px 0 2px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(45deg); transition: transform .2s ease, margin .2s ease; }
   .settings[open] > summary { background: var(--line); }
   .settings[open] > summary::after { margin-top: 3px; transform: rotate(-135deg); }
-  .filter-active { font-size: 11px; color: var(--tool); }
   .settings-panel { position: absolute; z-index: 20; right: 0; top: calc(100% + 10px); width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 180px); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow-float); }
   .setting-group + .setting-group { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
   .setting-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 9px; }
@@ -49,49 +41,8 @@
   .tog input { accent-color: var(--tool); margin: 0; width: 15px; height: 15px; }
   .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .setting-row .setting-label { margin: 0; }
-  @media (max-width: 640px) {
-    header { gap: 14px; }
-    .summary { margin-left: 0; width: 100%; gap: 18px; }
-    .controls { gap: 6px; padding-top: 12px; }
-    .seg button { padding-inline: 9px; }
-    .controls > .btn, .settings > summary { padding-inline: 9px; }
-  }
-  @media (max-width: 360px) {
-    body { padding-inline: 10px; }
-    .controls { gap: 4px; }
-    .seg button { padding-inline: 7px; }
-  }
 
-  section { margin-top: 26px; }
-  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
-  section h2 .n { color: var(--faint); font-weight: 500; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
-  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } .controls { margin-left: 0; } }
-
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; transition: border-color .3s; }
-  .card.sub { padding: 10px 12px; gap: 6px; }
-  .card.flash { animation: flash 1.6s ease-out; }
-  @keyframes flash { 0% { box-shadow: 0 0 0 3px var(--done); } 100% { box-shadow: var(--shadow); } }
-  .card[data-s="waiting"], .card[data-s="error"] { border-color: color-mix(in srgb, var(--s) 55%, var(--line)); }
-  .top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .agent { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--muted); flex: none; }
-  .agent-logo { width: 20px; height: 20px; object-fit: contain; padding: 1px; flex: none; }
-  @media (prefers-color-scheme: dark) {
-    .agent-logo.mono { filter: invert(1); }
-  }
-  .project { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .time { margin-left: auto; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
-  .title { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .status { display: flex; align-items: center; gap: 8px; color: var(--s); font-weight: 600; font-size: 13px; min-width: 0; }
-  .status .lbl { white-space: nowrap; flex: none; }
-  .status .act { flex: 1 1 auto; color: var(--ink); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: var(--font-mono); font-size: 12px; }
-  .q, .r { font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
-  .q::before { content: "› "; color: var(--faint); }
-  .r { color: var(--ink); opacity: .85; }
-  .r::before { content: "← "; color: var(--faint); }
-  .err { font-size: 12.5px; color: var(--error); }
-  .today-tokens { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .today-panel { width: min(340px, calc(100vw - 32px)); }
+  .today-note { margin-top: 12px; line-height: 1.5; }
   .today-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .today-big div { padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
   .today-big b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
@@ -99,18 +50,12 @@
   .today-head { margin: 12px 0 6px; font-weight: 600; }
   .today-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; }
   .today-row .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .today-note { margin-top: 12px; line-height: 1.5; }
-  .ctx { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--faint); }
-  .ctx .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-  .ctx .bar i { display: block; height: 100%; border-radius: 2px; background: var(--st-done); }
-  .ctx.warn .bar i { background: var(--st-waiting); }
-  .ctx.full .bar i { background: var(--st-error); }
   /* ---- toolbar menus and controls, styled to match (no browser defaults) */
   details.menu > summary { gap: 7px; }
   .scene-ico { display: inline-flex; }
   .scene-art { width: 18px; height: 18px; flex: none; display: block; object-fit: contain; }
   .scene-list .thumb .scene-art { width: 22px; height: 22px; }
-  #sceneName, #langName { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sceneName { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Scene, agent and language menus share one compact list. */
   .list-panel { width: 250px; padding: 12px; }
   .scene-panel { right: auto; left: 0; }
@@ -145,121 +90,47 @@
   .tog input:focus-visible { outline: 2px solid var(--tool); outline-offset: 2px; }
   .tog-note { margin: 0 2px 4px; font-size: 12px; line-height: 1.5; color: var(--muted); }
   .prefs-panel .setting-toggles:last-of-type { margin-bottom: 4px; }
-  /* ---- full-screen mode: the office fills the window, agents in a side panel */
+  /* ---- full-screen mode: the office fills the window */
   .ui-ico { stroke-width: 1.8; }
-  .side, .side-tab { display: none; }
   body.full { overflow: hidden; padding: 0; margin: 0; height: 100dvh; }
   body.full .wrap { max-width: none; height: 100dvh; padding: 0; display: flex; flex-direction: column; }
   body.full header { flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  body.full h1 { font-size: 15px; white-space: nowrap; }
-  body.full .summary { margin-left: 0; flex-wrap: nowrap; }
-  body.full .controls { width: auto; flex: 1; min-width: 0; padding: 0; border: 0; flex-wrap: wrap; row-gap: 6px; }
-  /* The panel floats over a full-width office; the office pans its view to keep
-     the room clear of it (setInset), so the canvas never resizes during the slide. */
+  /* The office owns the whole stage in full-screen mode; no side panel inset. */
   body.full #officeWrap { position: relative; flex: 1; min-height: 0; }
   body.full .office { height: 100%; min-height: 0; border: 0; border-radius: 0; }
   body.full .legend { position: absolute; left: 12px; bottom: 10px; margin: 0; padding: 5px 8px; gap: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(6px); font-size: var(--fs-11); }
   body.full .legend .dot { width: 6px; height: 6px; }
   body.full .legend .agent-logo { width: 12px; height: 12px; padding: 0; }
   body.full #agentLegend { bottom: 42px; }
-  body.full #main { display: none; }
   /* The video pop-out preview and its errors float over the office instead of pushing it down. */
   body.full .pip-preview { position: fixed; z-index: 25; left: 16px; bottom: 84px; width: min(360px, calc(100vw - 32px)); margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow-float); }
   body.full .pip-preview video { width: 100%; height: auto; border-radius: 8px; }
   body.full .pip-preview p { margin: 0 0 8px; font-size: 12px; }
   body.full .pip-error { position: fixed; z-index: 25; left: 50%; top: calc(var(--bar, 53px) + 12px); transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-float); }
-  body.full .side { display: block; position: fixed; z-index: 15; right: 0; bottom: 0; top: var(--bar, 53px); width: 340px; border-left: 1px solid var(--line); background: var(--panel); transition: transform .32s cubic-bezier(.2, .8, .2, 1), box-shadow .32s; overflow: hidden; }
-  body.full.side-closed { --side: 0px; }
-  body.full.side-closed .side { transform: translateX(100%); box-shadow: none; }
-  body.full.side-closed .side-tab { display: inline-flex; animation: tabIn .3s .18s both cubic-bezier(.2, .8, .2, 1); }
-  @keyframes tabIn { from { opacity: 0; transform: translateX(12px); } }
-  .side-tab { position: fixed; z-index: 15; right: 12px; top: calc(var(--bar, 53px) + 12px); align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 600 13px inherit; cursor: pointer; box-shadow: var(--shadow-float); }
-  .side-pane { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--panel); transition: transform .34s cubic-bezier(.2, .8, .2, 1), opacity .34s; }
-  /* Layer two slides in over the list; the list eases left and fades. */
-  #sideDetail { transform: translateX(100%); }
-  .side.detail #sideDetail { transform: none; }
-  .side.detail #sideList { transform: translateX(-22%); opacity: 0; }
-  .side.opening .srow, .side.entering #detailBody > * { animation: rowIn .38s both cubic-bezier(.2, .8, .2, 1); animation-delay: calc(var(--i, 0) * 28ms + 80ms); }
-  .side.entering #detailBody > * { animation-delay: 140ms; }
-  @keyframes rowIn { from { opacity: 0; transform: translateX(14px); } }
-  @media (prefers-reduced-motion: reduce) {
-    .side, .side-pane { transition: none; }
-    .side.opening .srow, .side.entering #detailBody > *, body.full.side-closed .side-tab { animation: none; }
-  }
-  .side-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
-  #detailTitle { display: flex; align-items: center; gap: 7px; }
-  .side-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .side-count { color: var(--muted); font-size: 12px; }
   .icon-btn { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
   .icon-btn:hover { color: var(--ink); }
-  .side-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 16px; }
-  .side-group { margin: 10px 6px 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .srow { width: 100%; display: grid; grid-template-columns: 18px 1fr auto; gap: 2px 9px; align-items: center; text-align: left; padding: 9px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; cursor: pointer; }
-  .srow:hover, .srow:focus-visible { background: color-mix(in srgb, var(--ink) 6%, transparent); outline: none; }
-  .srow .agent-logo { width: 16px; height: 16px; margin: 0; }
-  .srow .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
-  .srow .tm { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
-  .srow .st { grid-column: 2 / 4; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
-  .srow .st i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--s); }
-  .srow .st span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .srow .st b { flex: none; color: var(--s); font-weight: 600; }
-  .srow.sub .nm { font-weight: 500; color: var(--muted); }
-  .dmeta { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 10px 6px 12px; font-size: 12.5px; }
-  .dmeta dt { color: var(--faint); }
-  .dmeta dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dmeta dd.mono { font-family: var(--font-mono); font-size: 11.5px; }
-  .dstatus { display: flex; align-items: center; gap: 7px; margin: 8px 6px 0; font-size: 13px; flex-wrap: wrap; }
-  .dstatus i { width: 8px; height: 8px; border-radius: 50%; background: var(--s); }
-  .dstatus b { color: var(--s); }
-  .dstatus .act { color: var(--muted); }
-  .dtitle { margin: 4px 6px 0; font-size: 13px; color: var(--muted); }
-  .dactions { display: flex; gap: 8px; margin: 0 6px 6px; }
-  .dactions .copy { font-size: 12px; }
-  .side .ctx { margin: 0 6px 10px; }
-  .msgs { display: flex; flex-direction: column; gap: 8px; margin: 6px 4px 0; }
-  .msg { max-width: 92%; padding: 8px 11px; border-radius: 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .msg.user { align-self: flex-end; background: color-mix(in srgb, var(--tool) 16%, var(--panel)); }
-  .msg.assistant { align-self: flex-start; background: color-mix(in srgb, var(--ink) 6%, var(--panel)); border: 1px solid var(--line); }
-  .msg.tool { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 3px 4px; color: var(--muted); font: 11.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .msg .at { display: block; margin-top: 3px; font-size: 10.5px; color: var(--faint); }
-  .msgs-note { margin: 12px 6px; font-size: 12.5px; color: var(--muted); }
-  .side-sec { margin: 14px 6px 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  /* The panel's group headings already count Needs you / Working / Finished, so the
-     toolbar drops those chips (and then the title) before it would wrap. */
-  @media (max-width: 1240px) { body.full .summary { display: none; } }
   @media (max-width: 900px) {
-    body.full h1, body.full #langName, body.full .today-tokens,
-    body.full #todayMenu > summary [data-t], body.full #settingsMenu > summary [data-t] { display: none; }
+    body.full #settingsMenu > summary [data-t] { display: none; }
   }
   /* Phones: one row of icon buttons; the labels, chevrons and pop-out (unsupported there) go. */
   @media (max-width: 640px) {
     html body.full header { padding: 8px 10px; gap: 6px; flex-wrap: nowrap; }
-    html body.full .controls { flex-wrap: nowrap; gap: 6px; }
     body.full details.menu > summary { gap: 0; padding-inline: 9px; }
     body.full #sceneMenu > summary { gap: 6px; }
     body.full #sceneName { max-width: 6.5em; }
     body.full details.menu > summary::after,
-    body.full #agentName, body.full #langName, body.full .today-tokens,
-    body.full #todayMenu > summary [data-t], body.full #settingsMenu > summary [data-t] { display: none; }
+    body.full #agentName,
+    body.full #settingsMenu > summary [data-t] { display: none; }
     body.full details.menu.active > summary { position: relative; }
     body.full details.menu.active > summary::before { content: ""; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--tool); }
   }
   @media (max-width: 359px) { body.full #sceneName { display: none; } }
   @media (max-width: 760px) {
-    body.full .side { width: min(340px, 88vw); }
-    body.full h1, body.full .summary { display: none; }
     body.full header { flex-wrap: wrap; }
     /* Menus span the screen under the toolbar instead of hanging off their button. */
     body.full .settings-panel { position: fixed; left: auto; right: 12px; max-width: calc(100vw - 24px); top: calc(var(--bar, 53px) + 6px); max-height: calc(100dvh - var(--bar, 53px) - 24px); }
-    body.full .controls { flex-wrap: wrap; row-gap: 6px; }
   }
-  .stuck { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--error); white-space: nowrap; }
   .ui-ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .card.is-stuck { border-color: color-mix(in srgb, var(--error) 45%, var(--line)); }
-  .foot { display: flex; gap: 8px; align-items: center; color: var(--faint); font-size: 11.5px; min-width: 0; }
-  .foot .model { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .copy { margin-left: auto; border: 0; background: none; color: var(--faint); font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; flex: none; }
-  .copy:hover { color: var(--ink); }
 
   [data-s="thinking"] { --s: var(--st-thinking); }
   [data-s="tool"] { --s: var(--st-tool); }
@@ -269,24 +140,6 @@
   [data-s="interrupted"] { --s: var(--st-interrupted); }
   [data-s="error"] { --s: var(--st-error); }
   [data-s="idle"] { --s: var(--st-interrupted); }
-
-  .ind { width: 18px; height: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; flex: none; }
-  .ind i { width: 4px; height: 4px; border-radius: 50%; background: var(--s); display: none; }
-  [data-s="thinking"] .ind i { display: block; }
-  [data-s="thinking"] .ind i { animation: bob 1.2s infinite ease-in-out; }
-  [data-s="thinking"] .ind i:nth-child(2) { animation-delay: .15s; }
-  [data-s="thinking"] .ind i:nth-child(3) { animation-delay: .3s; }
-  @keyframes bob { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
-  [data-s="tool"] .ind::before { content: ""; width: 11px; height: 11px; border: 2px solid var(--s); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  [data-s="typing"] .ind::before { content: ""; width: 2px; height: 13px; background: var(--s); animation: blink 1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-  [data-s="waiting"] .ind::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--s); animation: pulse 1.4s infinite; }
-  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--s) 60%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
-  [data-s="done"] .ind::before { content: "✓"; color: var(--s); font-weight: 700; }
-  [data-s="error"] .ind::before { content: "!"; color: var(--s); font-weight: 800; }
-  [data-s="interrupted"] .ind::before { content: "■"; color: var(--s); font-size: 9px; }
-  [data-s="idle"] .ind::before { content: "–"; color: var(--s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 
   .office { position: relative; height: min(74vh, 820px); min-height: 380px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
@@ -296,6 +149,7 @@
   .office-loader { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 13px; z-index: 2; }
   .office.loading .office-loader { display: flex; }
   .office-loader .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--tool); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .office-gl, .office-overlay { position: absolute; inset: 0; }
   .office-overlay { touch-action: none; }
   /* right-top "working now" card: the office's only list, so the old side panel can stay closed */
@@ -316,9 +170,6 @@
   .office-now-more { padding: 4px 7px 2px; color: var(--faint); font-size: var(--fs-11); }
   .office-now-knob { position: absolute; z-index: 7; right: 12px; top: 12px; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line-strong); border-radius: 50%; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow-float); color: var(--ink); font: 600 12px var(--font-mono); cursor: pointer; }
   .office-now-knob:hover { border-color: var(--accent); }
-  .tip { position: fixed; z-index: 10; width: 320px; max-width: calc(100vw - 24px); pointer-events: none; display: none; }
-  .tip.pinned { pointer-events: auto; }
-  .tip .card { box-shadow: var(--shadow-float); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
@@ -326,9 +177,6 @@
   .pip-preview p { margin: 0 0 10px; color: var(--muted); }
   .pip-preview video { display: block; width: min(100%, 520px); margin-bottom: 10px; background: var(--panel); }
   .pip-error { color: var(--error); margin: 0 0 12px; }
-  .newver { border: 1px solid var(--tool); background: color-mix(in srgb, var(--tool) 18%, var(--panel)); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer; animation: glowv 2.4s ease-in-out infinite; }
-  .newver:disabled { opacity: .7; cursor: default; animation: none; }
-  @keyframes glowv { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--tool) 25%, transparent); } }
   .empty { text-align: center; color: var(--muted); padding: 60px 16px; border: 1px dashed var(--line); border-radius: 12px; }
   .empty code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
   .conn { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--error); color: var(--on-accent); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; display: none; }
@@ -338,18 +186,11 @@
   body.pip { padding: 8px; }
   body.pip .wrap { height: calc(100dvh - 16px); display: flex; flex-direction: column; }
   body.pip header { gap: 6px; margin-bottom: 8px; flex: none; }
-  body.pip h1, body.pip .newver, body.pip #legend,
-  body.pip .controls > :not(#viewSeg):not(#qualSeg) { display: none !important; }
-  body.pip .controls { width: auto; padding: 0; border: 0; }
-  body.pip .chip { padding: 2px 6px; font-size: 11px; }
-  body.pip .summary { gap: 4px; width: auto; margin-left: 0; }
+  body.pip #legend { display: none !important; }
   body.pip #officeWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   body.pip .office { flex: 1; height: auto; min-height: 120px; }
   body.pip #main { overflow: auto; min-height: 0; }
   body.pip #main:empty { display: none; }
-  body.pip section { margin-top: 12px; }
-  body.pip section:first-child { margin-top: 0; }
-  body.pip .grid { grid-template-columns: 1fr; }
 </style>
 <link rel="stylesheet" href="/ui/tokens.css">
 <link rel="stylesheet" href="/theme.css">
@@ -404,12 +245,6 @@
               <option value="mid" data-t="qMid"></option>
               <option value="high" data-t="qHigh"></option>
             </select>
-            <div class="setting-row"><label class="setting-sub" for="legacyView" data-t="legacyViewsL"></label></div>
-            <select class="ui-input" id="legacyView">
-              <option value="" data-t="legacyNone"></option>
-              <option value="topo" data-t="topo"></option>
-              <option value="list" data-t="list"></option>
-            </select>
             <div class="setting-toggles">
               <label class="tog" id="agentBadgeToggle"><span data-t="showAgent"></span><input type="checkbox" role="switch" id="showAgent"></label>
             </div>
@@ -437,8 +272,7 @@
           <div class="setting-group">
             <span class="setting-label" data-t="groupAbout"></span>
             <div class="setting-row"><span class="setting-sub" data-t="versionL"></span><span class="setting-value ui-num" id="aboutVer"></span></div>
-            <button class="newver" id="newVer" hidden></button>
-            <p class="tog-note" data-t="aboutNote"></p>
+            <p class="tog-note" id="aboutNote"></p>
           </div>
         </div>
       </details>
@@ -478,22 +312,6 @@
     </aside>
     <button class="office-now-knob" id="officeNowKnob" type="button" hidden></button>
   </div>
-  <div id="topoWrap" hidden>
-    <canvas id="topoCanvas"></canvas>
-    <div id="topoHint">主控派出的子代理与它们的关系 · 點一個人看它全部做了什麼</div>
-  </div>
-  <aside class="side" id="side" aria-label="Agents">
-    <div class="side-pane" id="sideList">
-      <div class="side-head"><b id="sideTitle"></b><span class="side-count ui-num" id="sideCount"></span>
-        <button class="icon-btn" id="sideHide"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5L21 12l-6.5 6.5M3 12h17"/></svg></button></div>
-      <div class="side-body" id="sideRows"></div>
-    </div>
-    <div class="side-pane" id="sideDetail" inert>
-      <div class="side-head"><button class="icon-btn" id="sideBack"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg></button><b id="detailTitle"></b></div>
-      <div class="side-body" id="detailBody"></div>
-    </div>
-  </aside>
-  <button class="side-tab" id="sideTab"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5L3 12l6.5 6.5M21 12H4"/></svg><span id="sideTabCount"></span></button>
   <div id="wb" hidden>
     <section class="wb-left" id="wbLeft">
       <div class="wb-left-head">
@@ -504,7 +322,7 @@
     </section>
     <section class="wb-mid" id="wbMid"><div class="wb-mid-inner" id="wbDetail"></div></section>
     <aside class="wb-right" id="wbRight">
-      <div class="wb-right-head"><h2>属性与产物</h2>
+      <div class="wb-right-head"><h2 data-t="wbPropsTitle"></h2>
         <button class="icon-btn" id="wbRightHide" type="button" data-a="wbCollapse"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg></button>
       </div>
       <div class="wb-right-body" id="wbAside"></div>
@@ -515,28 +333,27 @@
   <main id="main"></main>
 </div>
 <div id="lightbox">
-  <button type="button" class="lb-nav lb-prev" aria-label="上一张">‹</button>
+  <button type="button" class="lb-nav lb-prev" data-a="prevImage">‹</button>
   <img alt="">
   <span class="cap"></span>
-  <button type="button" class="lb-nav lb-next" aria-label="下一张">›</button>
+  <button type="button" class="lb-nav lb-next" data-a="nextImage">›</button>
 </div>
 <div class="conn" id="conn" data-t="disconnected"></div>
-<div class="tip" id="tip"></div>
 <div class="help" id="help" hidden>
   <div class="help-panel" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="help-head">
-      <h2 id="helpTitle">键盘快捷键</h2>
-      <button type="button" class="icon-btn" id="helpClose" aria-label="关闭">×</button>
+      <h2 id="helpTitle" data-t="helpTitle"></h2>
+      <button type="button" class="icon-btn" id="helpClose" data-a="close">×</button>
     </div>
     <dl class="help-list">
-      <div><dt><span class="ui-kbd">Ctrl K</span></dt><dd>搜索</dd></div>
-      <div><dt><span class="ui-kbd">j</span><span class="ui-kbd">k</span></dt><dd>上下移动</dd></div>
-      <div><dt><span class="ui-kbd">Enter</span></dt><dd>打开</dd></div>
-      <div><dt><span class="ui-kbd">Esc</span></dt><dd>清除 / 关闭</dd></div>
-      <div><dt><span class="ui-kbd">[</span><span class="ui-kbd">]</span></dt><dd>折叠 / 展开</dd></div>
-      <div><dt><span class="ui-kbd">?</span></dt><dd>帮助</dd></div>
+      <div><dt><span class="ui-kbd">Ctrl K</span></dt><dd data-t="helpSearch"></dd></div>
+      <div><dt><span class="ui-kbd">j</span><span class="ui-kbd">k</span></dt><dd data-t="helpMove"></dd></div>
+      <div><dt><span class="ui-kbd">Enter</span></dt><dd data-t="helpOpen"></dd></div>
+      <div><dt><span class="ui-kbd">Esc</span></dt><dd data-t="helpEsc"></dd></div>
+      <div><dt><span class="ui-kbd">[</span><span class="ui-kbd">]</span></dt><dd data-t="helpFold"></dd></div>
+      <div><dt><span class="ui-kbd">?</span></dt><dd data-t="helpHelp"></dd></div>
     </dl>
-    <p class="help-note">按 Esc 关闭</p>
+    <p class="help-note" data-t="helpCloseNote"></p>
   </div>
 </div>
 <script src="/i18n.js"></script>
@@ -549,15 +366,16 @@
 let L = I18N.en;
 let langCode = 'en';
 let rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto', style: 'short' });
+const tr = (k) => L[k] ?? (langCode.startsWith('zh') ? I18N['zh-CN'][k] : undefined) ?? I18N.en[k] ?? k;
 function chooseLang(serverGuess) {
   const pick = store.get('lang', 'auto');
   if (pick !== 'auto' && I18N[pick]) return pick;
   if (serverGuess && I18N[serverGuess]) return serverGuess;
   const guess = i18nFromBrowser(navigator.languages || [navigator.language]);
-  // This board is read in Chinese; any zh variant lands on Traditional Chinese,
-  // and a browser we can't place still gets Chinese rather than English.
-  if (guess && I18N[guess]) return guess.startsWith('zh') ? 'zh-TW' : guess;
-  return 'zh-TW';
+  // This board is read in Chinese; a browser we can't place still gets
+  // Simplified Chinese rather than English.
+  if (guess && I18N[guess]) return guess.startsWith('zh') ? 'zh-CN' : guess;
+  return 'zh-CN';
 }
 function applyLang(code) {
   if (code === langCode && L === I18N[code] && document.documentElement.dataset.localized) return;
@@ -566,8 +384,8 @@ function applyLang(code) {
   L = I18N[code];
   document.documentElement.lang = L.html;
   rtf = new Intl.RelativeTimeFormat(L.html, { numeric: 'auto', style: 'short' });
-  // New keys fall back to English until every translation catches up.
-  const t = (k) => L[k] ?? I18N.en[k] ?? k;
+  // New keys fall back to Simplified Chinese for any zh variant, then English.
+  const t = tr;
   document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll('[data-a]').forEach((el) => { const v = t(el.dataset.a); el.setAttribute('aria-label', v); el.title = v; });
   const searchEl = document.getElementById('wbSearch');
@@ -583,6 +401,9 @@ function applyLang(code) {
   if (typeof syncControls === 'function') syncControls();
   if (typeof renderSceneSel === 'function') renderSceneSel();
   if (typeof renderVersion === 'function') renderVersion();
+  window.WbDetail?.onLang?.();
+  window.WbAside?.onLang?.();
+  window.Timeline?.onLang?.();
   window.Workbench?.onLang?.();
 }
 
@@ -593,14 +414,14 @@ const store = (() => {
   return { get, set };
 })();
 
-const PREF_DEFAULTS = { view: 'workbench', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, side: true, lang: 'auto', theme: 'auto' };
+const PREF_DEFAULTS = { view: 'workbench', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, lang: 'auto', theme: 'auto' };
 function validAgentId(v) {
   return typeof v === 'string' && v !== 'all' && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(v) && !Object.hasOwn(Object.prototype, v);
 }
 function validPreference(k, v) {
   if (!Object.hasOwn(PREF_DEFAULTS, k)) return false;
   if (typeof PREF_DEFAULTS[k] === 'boolean') return typeof v === 'boolean';
-  if (k === 'view') return ['workbench', 'timeline', 'office', 'topo', 'list'].includes(v);
+  if (k === 'view') return ['workbench', 'timeline', 'office'].includes(v);
   if (k === 'quality') return ['mid', 'high'].includes(v);
   if (k === 'theme') return ['auto', 'dark', 'light'].includes(v);
   // Which agents to show; none selected means all of them.
@@ -623,32 +444,7 @@ function readPreferences() {
     return [k, validPreference(k, v) ? v : d];
   }));
 }
-// Theme: follow the system unless the person picked dark or light. Canvas
-// renderers cannot read CSS variables, so keep a colour cache refreshed
-// whenever the theme may have changed.
-let themeColors = null;
-function readThemeColors() {
-  const css = getComputedStyle(document.documentElement);
-  const v = (n, fallback) => css.getPropertyValue(n).trim() || fallback;
-  themeColors = {
-    ink: v('--ink', '#241f18'),
-    muted: v('--muted', '#6c6355'),
-    faint: v('--faint', '#9b917f'),
-    line: v('--line', '#d9cfbd'),
-    panel: v('--panel', '#f7f3ea'),
-    bg: v('--bg', '#ece5d6'),
-    st: {
-      thinking: v('--st-thinking', '#6f5a9e'),
-      tool: v('--st-tool', '#3f6f93'),
-      typing: v('--st-typing', '#4f7d44'),
-      waiting: v('--st-waiting', '#a8741f'),
-      done: v('--st-done', '#5c7550'),
-      error: v('--st-error', '#b0412f'),
-      interrupted: v('--st-interrupted', '#8a8072'),
-      idle: v('--st-interrupted', '#8a8072'),
-    },
-  };
-}
+// Theme: follow the system unless the person picked dark or light.
 function syncTheme() {
   document.querySelectorAll('#themeSeg button').forEach((b) => {
     const on = b.dataset.themeV === state.theme;
@@ -660,7 +456,6 @@ function applyTheme() {
   const t = state.theme;
   if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
   else delete document.documentElement.dataset.theme;
-  readThemeColors();
   syncTheme();
   window.dispatchEvent(new Event('wmad:theme'));
 }
@@ -699,12 +494,6 @@ let popout = null;
 
 const ACTIVE = new Set(['thinking', 'tool', 'typing']);
 const AGENT_NAME = Object.fromEntries(Object.entries(OFFICE_AGENT_BADGES).map(([agent, badge]) => [agent, badge.label]));
-const GROUPS = [
-  { key: 'needsYou', match: (s) => s === 'waiting' || s === 'error' },
-  { key: 'working', match: (s) => ACTIVE.has(s) },
-  { key: 'finished', match: (s) => s === 'done' || s === 'interrupted' },
-  { key: 'idle', match: (s) => s === 'idle' },
-];
 
 // Top-bar heartbeat: active sessions sampled every 10 s, 60 samples = 10 min.
 const HB_LEN = 60;
@@ -759,11 +548,6 @@ function ago(t, now) {
   return rtf.format(Math.round(h / 24), 'day');
 }
 
-function timeLabel(s, now) {
-  if ((ACTIVE.has(s.status) || s.status === 'waiting') && s.turnStartedAt) return dur(now - s.turnStartedAt);
-  return s.lastEventAt ? ago(s.lastEventAt, now) : '';
-}
-
 // Single-quote for POSIX shells: inside '…' nothing ($(), backticks, $VAR)
 // is expanded, so a folder or session name can't run anything when pasted.
 const shq = (v) => `'${String(v).replace(/'/g, `'\\''`)}'`;
@@ -797,14 +581,6 @@ function fmtTokens(n) {
   return `${(n / 1e6).toFixed(n < 1e7 ? 2 : 1)}M`;
 }
 
-// How full the model's context window is, from the latest request in the log.
-function contextBar(c) {
-  if (!c || !c.window) return '';
-  const pct = Math.min(100, Math.round((c.used / c.window) * 100));
-  const tip = `${L.context} ${fmtTokens(c.used)} / ${fmtTokens(c.window)}`;
-  return `<div class="ctx${pct >= 85 ? ' full' : pct >= 60 ? ' warn' : ''}" title="${esc(tip)}"><span>${esc(L.context)}</span><span class="bar"><i style="width:${pct}%"></i></span><span>${pct}%</span></div>`;
-}
-
 function renderToday() {
   const t = state.data.summary;
   document.getElementById('todayTokens').textContent = t && t.tokens ? fmtTokens(t.tokens) : '';
@@ -822,31 +598,6 @@ function renderToday() {
     ${projects.length ? `<div class="today-head">${esc(L.topProjects)}</div>` : ''}
     ${projects.map(([p, n]) => `<div class="today-row">${esc(p)}<span class="n ui-num">${n} ${esc(L.turnsL)}</span></div>`).join('')}
     <div class="today-note">${esc(L.summaryNote)}</div>`;
-}
-
-function card(s, now) {
-  const project = s.project || (s.cwd ? s.cwd : '—');
-  const title = s.title && s.title !== project ? `<div class="title" title="${esc(s.title)}">${esc(s.title)}</div>` : '';
-  const act = s.activity ? `<span class="act" title="${esc(s.activity)}">${esc(s.activity)}</span>` : '';
-  const showText = !s.subagent || ACTIVE.has(s.status);
-  const q = showText && s.prompt ? `<div class="q" title="${esc(s.prompt)}">${esc(s.prompt)}</div>` : '';
-  const r = showText && s.reply && !ACTIVE.has(s.status) ? `<div class="r" title="${esc(s.reply)}">${esc(s.reply)}</div>` : '';
-  const err = s.error ? `<div class="err">${esc(s.error)}</div>` : '';
-  const sub = s.subagent ? ` · ${L.sub}` : '';
-  const stuck = s.stuck ? `<span class="stuck"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.2a2 2 0 0 1 3.4 0l7.6 13.1A2 2 0 0 1 19.6 20H4.4a2 2 0 0 1-1.7-2.7z"/><path d="M12 9.5v4.2M12 16.6v.1"/></svg>${esc(L.stuck(s.stuck))}</span>` : '';
-  const ctx = contextBar(s.context);
-  return `
-  <div class="card${s.subagent ? ' sub' : ''}${s.stuck ? ' is-stuck' : ''}${state.flash.has(s.key) ? ' flash' : ''}" data-s="${s.status}" data-key="${esc(s.key)}">
-    <div class="top">
-      <span class="agent ${esc(s.agent)}">${agentLogo(s.agent)}${esc(s.agentName || AGENT_NAME[s.agent] || s.agent)}</span>
-      <span class="project" title="${esc(s.cwd)}">${esc(project)}</span>
-      <span class="time ui-num" data-time="${esc(s.key)}">${esc(timeLabel(s, now))}</span>
-    </div>
-    ${title}
-    <div class="status"><span class="ind"><i></i><i></i><i></i></span><span class="lbl${s.status === 'thinking' ? ' ui-shimmer' : ''}">${esc(L[s.status] || s.status)}</span>${act}${stuck}</div>
-    ${err}${q}${r}${ctx}
-    <div class="foot"><span class="model">${esc((s.model || '') + sub)}</span>${resumeCmd(s) ? `<button class="copy" data-copy="${esc(resumeCmd(s))}">${L.copy}</button>` : ''}</div>
-  </div>`;
 }
 
 const matchAgent = (s) => !state.agents.length || state.agents.includes(s.agent);
@@ -902,14 +653,13 @@ function rollNumber(el, value) {
 
 function render() {
   const now = Date.now() - state.skew;
-  const list = visible();
   const all = state.data.sessions.filter((s) => matchAgent(s) && (state.showSub || !s.subagent));
 
   const count = (f) => all.filter((s) => f(s.status)).length;
   const needs = count((s) => s === 'waiting');
   const errors = count((s) => s === 'error');
   const working = count((s) => ACTIVE.has(s));
-  const finished = count(GROUPS[2].match);
+  const finished = count((s) => s === 'done' || s === 'interrupted');
   const setCount = (id, n) => rollNumber(document.getElementById(id), n);
   setCount('cntNeeds', needs);
   setCount('cntError', errors);
@@ -921,18 +671,14 @@ function render() {
   if (errSep) errSep.hidden = errors === 0;
 
   renderToday();
-  renderSide();
-  document.title = (needs ? '● ' : '') + (working ? `(${working}) ` : '') + 'Agent 观测台';
+  renderChips();
+  document.title = (needs ? '● ' : '') + (working ? `(${working}) ` : '') + tr('brand');
 
   const main = document.getElementById('main');
   const officeMode = state.view === 'office';
-  const topoMode = state.view === 'topo';
   const wbMode = state.view === 'workbench';
   const timelineMode = state.view === 'timeline';
-  document.body.classList.toggle('listview', state.view === 'list');
-  document.body.classList.toggle('hide-side', wbMode || timelineMode || officeMode);
   document.getElementById('officeWrap').style.display = officeMode ? '' : 'none';
-  document.getElementById('topoWrap').hidden = !topoMode;
   document.getElementById('wb').hidden = !wbMode;
   document.getElementById('tl').hidden = !timelineMode;
   // The office decides who sits at a desk and who wanders around.
@@ -957,20 +703,12 @@ function render() {
     document.getElementById('officeWrap').style.display = 'none';
     document.getElementById('wb').hidden = true;
     document.getElementById('tl').hidden = true;
-    document.body.classList.add('listview');
     main.innerHTML = `<div class="empty">${esc(L.pipOn)}</div>`;
-    hideTip();
     return;
   }
   if (officeMode) {
     main.innerHTML = officeList.length ? '' : `<div class="empty">${esc(L.empty)}</div>`;
     document.getElementById('officeWrap').style.display = officeList.length || state.full ? '' : 'none';
-    refreshTip();
-    return;
-  }
-  if (topoMode) {
-    main.innerHTML = '';
-    drawTopo();
     return;
   }
   if (wbMode) {
@@ -981,29 +719,11 @@ function render() {
   if (timelineMode) {
     main.innerHTML = '';
     window.Timeline?.render?.();
-    return;
   }
-  const groups = PIP ? GROUPS.slice(0, 2) : GROUPS;
-  if (!list.some((s) => groups.some((g) => g.match(s.status)))) {
-    main.innerHTML = `<div class="empty">${esc(PIP ? L.pipQuiet : L.empty)}</div>`;
-    return;
-  }
-  main.innerHTML = groups.map((g) => {
-    const items = list.filter((s) => g.match(s.status));
-    if (!items.length) return '';
-    return `<section><h2>${esc(groupLabel(g.key))} <span class="n ui-num">${items.length}</span></h2><div class="grid">${items.map((s) => card(s, now)).join('')}</div></section>`;
-  }).join('');
 }
 
 function tickTimes() {
-  if (tipKey) refreshTip();
-  const now = Date.now() - state.skew;
-  if (state.view === 'office') renderOfficeNow(now);
-  const byKey = new Map(state.data.sessions.map((s) => [s.key, s]));
-  document.querySelectorAll('[data-time]').forEach((el) => {
-    const s = byKey.get(el.dataset.time);
-    if (s) el.textContent = timeLabel(s, now);
-  });
+  if (state.view === 'office') renderOfficeNow(Date.now() - state.skew);
 }
 
 function onData(data) {
@@ -1085,7 +805,7 @@ document.addEventListener('keydown', (e) => {
   const m = MENUS.find((x) => x.open);
   if (m) { m.open = false; m.querySelector('summary').focus(); }
 });
-settingsMenu.addEventListener('toggle', () => { if (settingsMenu.open) hideTip(); });
+settingsMenu.addEventListener('toggle', () => { if (settingsMenu.open) closeMenus(); });
 
 // ---- keyboard help (? opens, Esc closes)
 const helpEl = document.getElementById('help');
@@ -1117,7 +837,7 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 function setQuality(v) {
-  state.quality = v; store.set('quality', v); hideTip(); syncControls(); makeOffice();
+  state.quality = v; store.set('quality', v); syncControls(); makeOffice();
 }
 document.getElementById('qualSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1135,20 +855,13 @@ function fadeView(id) {
   el._fadeT = setTimeout(() => el.classList.remove('view-enter'), 180);
 }
 function setView(v) {
-  state.view = v; store.set('view', v); hideTip(); hideOfficeTip(); syncControls(); render();
+  state.view = v; store.set('view', v); hideOfficeTip(); syncControls(); render();
   const viewId = v === 'workbench' ? 'wb' : v === 'timeline' ? 'tl' : v === 'office' ? 'officeWrap' : '';
   if (viewId) fadeView(viewId);
-  if (state.view === 'office') office?.setInset(panelInset(), false);
 }
 document.getElementById('viewSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   setView(b.dataset.v);
-});
-document.getElementById('legacyView').addEventListener('change', (e) => {
-  const v = e.target.value;
-  if (v) setView(v);
-  else if (state.view === 'topo' || state.view === 'list') setView('workbench');
-  closeMenus();
 });
 document.getElementById('tbCounts').addEventListener('click', (e) => {
   const b = e.target.closest('[data-wb-filter]'); if (!b) return;
@@ -1174,7 +887,6 @@ document.getElementById('themeSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   state.theme = b.dataset.themeV; store.set('theme', state.theme);
   applyTheme();
-  if (state.view === 'topo') drawTopo();
 });
 const showSub = document.getElementById('showSub');
 const showIdle = document.getElementById('showIdle');
@@ -1231,8 +943,6 @@ function syncControls() {
     b.setAttribute('aria-pressed', String(on));
   });
   document.getElementById('qualitySelect').value = state.quality;
-  const legacy = view === 'topo' || view === 'list' ? view : '';
-  document.getElementById('legacyView').value = legacy;
   document.getElementById('qualSeg').style.display = view === 'office' ? '' : 'none';
   document.getElementById('sceneMenu').hidden = view !== 'office' || state.quality !== 'high';
   showSub.checked = state.showSub;
@@ -1267,25 +977,6 @@ document.addEventListener('click', (e) => {
 });
 
 // ---- office view
-const tip = document.getElementById('tip');
-let tipKey = null, tipPinned = false, tipAt = { x: 0, y: 0 };
-function placeTip() {
-  const r = tip.getBoundingClientRect();
-  let x = tipAt.x + 16, y = tipAt.y + 16;
-  if (x + r.width > innerWidth - 8) x = tipAt.x - r.width - 16;
-  if (y + r.height > innerHeight - 8) y = Math.max(8, innerHeight - r.height - 8);
-  tip.style.left = Math.max(8, x) + 'px';
-  tip.style.top = y + 'px';
-}
-function refreshTip() {
-  if (!tipKey) return;
-  const s = state.data.sessions.find((x) => x.key === tipKey);
-  if (!s) return hideTip();
-  tip.innerHTML = card(s, Date.now() - state.skew);
-  placeTip();
-}
-function hideTip() { tipKey = null; tipPinned = false; tip.style.display = 'none'; tip.classList.remove('pinned'); }
-
 // Office labels reuse the workbench title parser ("T9 · 标题前 8 个字").
 function officeTitleOf(s) {
   const wb = window.Workbench;
@@ -1335,8 +1026,8 @@ function officeTipHtml(s) {
   const act = s.stuck ? L.stuck(s.stuck) : (s.activity || '');
   return `<div class="tl-tip-title">${esc(ti.title || s.project || s.agent)}</div>
     <div class="tl-tip-meta"><span class="ui-dot ${dot}"></span><span>${esc(L[st] || st)}</span>${ti.tag ? `<span class="tl-tip-sep">·</span><span>${esc(ti.tag)}</span>` : ''}</div>
-    <div class="tl-tip-kv"><span>用时 <b class="ui-num">${dur(Math.max(0, end - start))}</b></span><span>最近 <b class="ui-num">${s.lastEventAt ? ago(s.lastEventAt, now) : '—'}</b></span></div>
-    <div class="tl-tip-act"><span class="tl-tip-cap">最近动作</span>${esc(officeClip(act, 110) || '—')}</div>`;
+    <div class="tl-tip-kv"><span>${esc(tr('officeTipDuration'))} <b class="ui-num">${dur(Math.max(0, end - start))}</b></span><span>${esc(tr('officeTipRecent'))} <b class="ui-num">${s.lastEventAt ? ago(s.lastEventAt, now) : '—'}</b></span></div>
+    <div class="tl-tip-act"><span class="tl-tip-cap">${esc(tr('officeTipLastAction'))}</span>${esc(officeClip(act, 110) || '—')}</div>`;
 }
 function showOfficeTip(s, at) {
   if (officeTipKey !== s.key) officeTip.innerHTML = officeTipHtml(s);
@@ -1408,7 +1099,6 @@ async function makeOffice() {
   }
   office = mine;
   office.offDutyLabel = L.wentHome;
-  office.setInset(panelInset(), false);
   render();
   const ok = await mine.ready;
   if (office !== mine) return;
@@ -1421,7 +1111,7 @@ async function makeOffice() {
   }
   setLoading(false);
 }
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideTip(); hideOfficeTip(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideOfficeTip(); });
 
 // ---- office: floating "working now" card (replaces the old side panel here)
 const officeNowEl = document.getElementById('officeNow');
@@ -1443,13 +1133,13 @@ function renderOfficeNow(now = Date.now() - state.skew) {
     if (officeNowList.dataset.html) { officeNowList.innerHTML = ''; delete officeNowList.dataset.html; }
     return;
   }
-  const foldLabel = langCode.startsWith('zh') ? '折疊進行中' : 'Collapse';
-  document.getElementById('officeNowTitle').textContent = '未完成';
+  const foldLabel = tr('officeNowFold');
+  document.getElementById('officeNowTitle').textContent = tr('officeNowTitle');
   document.getElementById('officeNowCount').textContent = total;
   officeNowFoldBtn.title = foldLabel;
   officeNowFoldBtn.setAttribute('aria-label', foldLabel);
-  officeNowKnob.title = `未完成 · ${total}`;
-  officeNowKnob.setAttribute('aria-label', `未完成 · ${total}`);
+  officeNowKnob.title = `${tr('officeNowTitle')} · ${total}`;
+  officeNowKnob.setAttribute('aria-label', `${tr('officeNowTitle')} · ${total}`);
   officeNowKnob.textContent = total;
   const rows = list.slice(0, 6).map((s) => {
     const ti = officeTitleOf(s);
@@ -1466,7 +1156,7 @@ function renderOfficeNow(now = Date.now() - state.skew) {
     </button>`;
   }).join('');
   const more = total > 6
-    ? `<div class="office-now-more">${langCode.startsWith('zh') ? `還有 ${total - 6} 個` : `${total - 6} more`}</div>`
+    ? `<div class="office-now-more">${tr('officeNowMore')(total - 6)}</div>`
     : '';
   const html = rows + more;
   if (officeNowList.dataset.html !== html) {
@@ -1525,7 +1215,6 @@ sceneSel.addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b || b.classList.contains('on') || sceneSel.dataset.busy) return;
   let id = b.dataset.v;
-  hideTip();
   if (id.startsWith('dl:')) {
     // A scene pack: download it (the server checks its checksum), then switch.
     id = id.slice(3);
@@ -1544,47 +1233,19 @@ sceneSel.addEventListener('click', async (e) => {
 // scene choice doesn't build the default office first and then swap.
 const scenesReady = loadScenes();
 
-// ---- version + one-click update (the About group in settings)
+// ---- version (local only; this fork never checks upstream)
 let verInfo = null;
-async function runUpdate(btn) {
-  if (!btn || btn.disabled) return;
-  btn.disabled = true;
-  btn.textContent = L.updating;
-  const r = await fetch('/api/update', { method: 'POST', headers: { 'x-whatsmyagentdoing': 'update' } }).then((x) => x.json()).catch(() => ({ ok: false }));
-  if (!r.ok) {
-    btn.textContent = `${L.updateFailed}${r.error ? ': ' + r.error : ''}`;
-    setTimeout(renderVersion, 4000);
-    return;
-  }
-  btn.textContent = L.updated;
-  // the server restarts itself; reload once it answers again
-  const t0 = Date.now();
-  const wait = setInterval(() => {
-    fetch('/api/version', { cache: 'no-store' }).then((x) => x.json()).then((v) => {
-      if (v.version !== verInfo.version || Date.now() - t0 > 20000) { clearInterval(wait); location.reload(); }
-    }).catch(() => {});
-  }, 1000);
-}
 function renderVersion() {
-  if (!verInfo) return;
   const about = document.getElementById('aboutVer');
-  if (about) {
-    about.textContent = verInfo.updateAvailable && !verInfo.canUpdate
-      ? `v${verInfo.version} → v${verInfo.latest}`
-      : `v${verInfo.version}`;
-  }
-  const top = document.getElementById('newVer');
-  if (!top) return;
-  top.hidden = !(verInfo.updateAvailable && verInfo.canUpdate);
-  top.disabled = false;
-  if (!top.hidden) top.textContent = `⬆ ${L.newVersion} v${verInfo.latest}`;
-  top.onclick = () => runUpdate(top);
+  if (about) about.textContent = verInfo ? `v${verInfo.version}` : '';
+  const note = document.getElementById('aboutNote');
+  const fork = verInfo ? tr('aboutFork') : null;
+  if (note) note.textContent = typeof fork === 'function' ? fork(verInfo.version) : '';
 }
 function loadVersion() {
   fetch('/api/version', { cache: 'no-store' }).then((r) => r.json()).then((v) => { verInfo = v; renderVersion(); }).catch(() => {});
 }
 loadVersion();
-setInterval(loadVersion, 30 * 60 * 1000);
 
 // Language: Auto plus the nine translations, as a compact select in settings.
 function renderLangMenu() {
@@ -1616,7 +1277,6 @@ window.addEventListener('storage', (e) => {
   Object.assign(state, readPreferences());
   applyTheme();
   renderLangMenu();
-  hideTip();
   applyLang(chooseLang(state.data.lang));
   syncControls();
   renderSceneSel();
@@ -1627,11 +1287,6 @@ applyLang(chooseLang(null));
 syncControls();
 scenesReady.then(() => makeOffice());
 connect();
-// ---- full screen: the office fills the window; agents and their recent
-// conversation live in a side panel (list first, one agent on click).
-const sideEl = document.getElementById('side');
-let sel = null;              // key of the agent open in the panel
-let convo = { key: null, at: null, messages: null, private: false, busy: false };
 
 function statusColor(st) {
   return {
@@ -1644,35 +1299,9 @@ function hhmm(ms) {
   if (!ms) return '';
   return new Date(ms).toLocaleTimeString(langCode || undefined, { hour: '2-digit', minute: '2-digit' });
 }
-// How much of the office the open panel covers. On phones the panel is an
-// overlay over most of the screen, so the view doesn't move for it.
-function panelInset() {
-  const hidden = document.body.classList.contains('hide-side');
-  return state.full && state.side && !hidden && !matchMedia('(max-width: 760px)').matches ? sideEl.getBoundingClientRect().width || 340 : 0;
-}
-function setSide(open, remember = true) {
-  state.side = open;
-  if (remember) store.set('side', open);
-  document.body.classList.toggle('side-closed', !open);
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  office?.setInset(panelInset(), !still);
-  if (open) {
-    // Rows slide in one after another each time the panel opens.
-    sideEl.classList.remove('opening'); void sideEl.offsetWidth; sideEl.classList.add('opening');
-    clearTimeout(setSide.t); setSide.t = setTimeout(() => sideEl.classList.remove('opening'), 900);
-  }
-}
 function measureBar() {
   const h = document.querySelector('header').getBoundingClientRect().height;
   document.documentElement.style.setProperty('--bar', `${Math.round(h)}px`);
-}
-function syncFull() {
-  document.getElementById('sideTitle').textContent = L.agentsTitle;
-  document.getElementById('sideHide').title = L.hidePanel;
-  document.getElementById('sideHide').setAttribute('aria-label', L.hidePanel);
-  document.getElementById('sideBack').title = L.back;
-  document.getElementById('sideBack').setAttribute('aria-label', L.back);
-  document.getElementById('sideTab').setAttribute('aria-label', L.showPanel);
 }
 
 // Agent filter: one chip per client in use, any number selected; none means all.
@@ -1713,401 +1342,12 @@ document.getElementById('agentChips').addEventListener('click', (e) => {
 let rowsNow = false;
 function renderNow() { rowsNow = true; try { render(); } finally { rowsNow = false; } }
 
-const GROUP_LABEL = { needsYou: '需要你', working: '进行中', finished: '已完成', idle: '待命' };
-const groupLabel = (k) => GROUP_LABEL[k] || L[k];
-// The task id the brain gave it ("任務 T8a：…") and the body without that prefix.
-function taskTag(s) { return s.title && s.title !== s.project ? s.title : ''; }
-function taskBody(s) {
-  return (s.prompt || '')
-    .replace(/^\s*(?:任務|任务|Task)\s*[A-Za-z]{0,3}\d+[A-Za-z]?\s*[：:]\s*/i, '')
-    .replace(/\s+/g, ' ').trim();
-}
-function sessionMeta(s) {
-  const bits = [];
-  if (s.effort) bits.push(`档位 ${s.effort}`);
-  if (Number.isFinite(s.cost)) bits.push(`$${s.cost.toFixed(3)}`);
-  if (s.turns) bits.push(`${s.turns} 轮`);
-  if (s.thinkingTokens > 999) bits.push(`思考 ${fmtTokens(s.thinkingTokens)}`);
-  if (s.images) bits.push(`圖 ${s.images}`);
-  return bits;
-}
-function renderSide() {
-  renderChips();
-  if (!state.full) return;
-  syncFull();
-  const now = Date.now() - state.skew;
-  const list = visible();
-  document.getElementById('sideCount').textContent = list.length;
-  document.getElementById('sideTabCount').textContent = `${L.agentsTitle} · ${list.length}`;
-  const rows = GROUPS.map((g) => {
-    const items = list.filter((s) => g.match(s.status));
-    if (!items.length) return '';
-    return `<div class="side-group">${esc(groupLabel(g.key))} · <span class="ui-num">${items.length}</span></div>` + items.map((s, i) => {
-      const act = s.stuck ? L.stuck(s.stuck) : s.activity || '';
-      const tag = taskTag(s);
-      const meta = sessionMeta(s);
-      const q = taskBody(s);
-      const r = (s.reply || '').replace(/\s+/g, ' ').trim();
-      const st = s.status;
-      const stateWord = st === 'done' && s.stuck ? '' : '';
-      return `<button class="srow${s.subagent ? ' sub' : ''}${sel === s.key ? ' active' : ''}" data-key="${esc(s.key)}"
-        style="--s:${statusColor(st)};--i:${Math.min(i + (g.key === 'working' ? 3 : g.key === 'finished' ? 8 : 0), 14)}"
-        title="${esc(s.cwd || '')}">
-        <span class="r-top">
-          ${agentLogo(s.agent) || '<span></span>'}
-          <span class="r-task">${tag ? `<span class="tag">${esc(tag)}</span>` : ''}${esc(s.project || AGENT_NAME[s.agent] || s.agent)}</span>
-          <span class="r-time ui-num" data-time="${esc(s.key)}"></span>
-        </span>
-        <span class="r-state"><i></i><b class="${st === 'thinking' ? 'ui-shimmer' : ''}">${esc(L[st] || st)}</b>${act ? `<span>${esc(act)}</span>` : ''}</span>
-        ${q ? `<span class="r-prompt">${esc(q)}</span>` : ''}
-        ${r && !ACTIVE.has(st) ? `<span class="r-reply">${esc(r)}</span>` : ''}
-        ${meta.length ? `<span class="r-meta ui-num">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</span>` : ''}
-      </button>`;
-    }).join('');
-  }).join('');
-  const box = document.getElementById('sideRows');
-  const html = rows || `<div class="msgs-note">${esc(L.empty)}</div>`;
-  // Rows re-sort as statuses change; hold them still while the pointer is on
-  // the list so a click lands on the agent you aimed at, and catch up on leave.
-  if (box.dataset.html !== html && box.matches(':hover') && box.dataset.html && !rowsNow) { box.dataset.stale = '1'; }
-  else if (box.dataset.html !== html) {
-    box.innerHTML = html; box.dataset.html = html; delete box.dataset.stale;
-    box.querySelectorAll('[data-time]').forEach((el) => { const s = list.find((x) => x.key === el.dataset.time); if (s) el.textContent = timeLabel(s, now); });
-  }
-  if (sel) renderDetail();
-}
-
-function openDetail(key) {
-  sel = key;
-  if (!state.side) setSide(true);
-  document.getElementById('sideList').inert = true;
-  document.getElementById('sideDetail').inert = false;
-  if (convo.key !== key) convo = { key, at: null, messages: null, private: false, busy: false };
-  // Build the details off-screen this frame and start the slide on the next,
-  // so the click doesn't also pay for layout in the slide's first frame.
-  renderDetail(true);
-  requestAnimationFrame(() => {
-    if (sel !== key) return;
-    sideEl.classList.add('detail', 'entering');
-    clearTimeout(openDetail.t); openDetail.t = setTimeout(() => sideEl.classList.remove('entering'), 800);
-  });
-}
-function closeDetail() {
-  sel = null;
-  sideEl.classList.remove('detail');
-  document.getElementById('sideList').inert = false;
-  document.getElementById('sideDetail').inert = true;
-}
-
-// ---- transcript blocks: the run log carries thinking, tool calls, results and
-// images, so the detail pane shows the whole shift rather than a chat log.
-function foldBlock(text, lines) {
-  if (!text) return '';
-  const long = text.length > lines * 96;
-  const inner = `<div class="blk-body clamp c${lines}">${esc(text)}</div>`;
-  return long ? `<details class="fold"><summary>${inner}</summary></details>` : inner;
-}
-function shotUrl(key, im) { return `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`; }
-function blkPrompt(m) {
-  return `<div class="blk prompt"><div class="blk-title">委派 <span class="n">收到任务 · ${String(m.text || '').length} 字</span></div>${foldBlock(m.text || '', 6)}</div>`;
-}
-function blkThink(m) {
-  return `<div class="blk think"><div class="blk-title">思考${m.at ? `<span class="n">${hhmm(m.at)}</span>` : ''}</div>${foldBlock(m.text || '', 3)}</div>`;
-}
-function blkSay(m) {
-  return `<div class="blk say"><div class="blk-title">回复${m.at ? `<span class="n">${hhmm(m.at)}</span>` : ''}</div>${foldBlock(m.text || '', 8)}</div>`;
-}
-function blkTool(m, key) {
-  const shots = (m.images || []).map((im, i) => {
-    const u = shotUrl(key, im);
-    return `<button data-shot="${u}" data-cap="${esc(m.name || '')} · 圖 ${i + 1}" title="點開看大圖"><img loading="lazy" src="${u}" alt=""></button>`;
-  }).join('');
-  const res = m.result && m.result.text
-    ? `<details class="fold"><summary><div class="res clamp c2">${esc(m.result.text)}</div></summary></details>` : '';
-  return `<div class="blk tool"><div class="blk-title"><span class="nm">${esc(m.name || '工具')}</span>${m.at ? `<span class="n">${hhmm(m.at)}</span>` : ''}</div>`
-    + `<div class="arg">${esc(m.text || '')}</div>${res}${shots ? `<div class="shots">${shots}</div>` : ''}</div>`;
-}
-function blkFinal(m) {
-  const bits = [];
-  if (Number.isFinite(m.cost)) bits.push(`$${m.cost.toFixed(3)}`);
-  if (m.turns) bits.push(`${m.turns} 轮`);
-  return `<div class="blk final${m.isError ? ' is-error' : ''}"><div class="blk-title">${m.isError ? '最终错误' : '最终答复'}<span class="n">${esc(bits.join(' · '))}</span></div>${foldBlock(m.text || '', 12)}</div>`;
-}
-function renderTranscript(messages, key) {
-  return `<div class="tscript">${messages.map((m) => {
-    if (m.role === 'user') return blkPrompt(m);
-    if (m.role === 'thinking') return blkThink(m);
-    if (m.role === 'tool') return blkTool(m, key);
-    if (m.role === 'final') return blkFinal(m);
-    if (m.role === 'assistant') return blkSay(m);
-    return m.text ? `<div class="msgs-note">${esc(m.text)}</div>` : '';
-  }).join('')}</div>`;
-}
-
-function renderDetail(scrollDown) {
-  const s = state.data.sessions.find((x) => x.key === sel);
-  if (!s) { closeDetail(); return; }
-  const now = Date.now() - state.skew;
-  document.getElementById('detailTitle').innerHTML = `${agentLogo(s.agent)}${esc(taskTag(s) ? `${taskTag(s)} · ${s.project || ''}` : (s.project || AGENT_NAME[s.agent] || s.agent))}`;
-  // Fetch again whenever the agent logged something new.
-  if (convo.at !== s.lastEventAt && !convo.busy) loadConvo(s);
-  const body = document.getElementById('detailBody');
-  const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
-  const msgs = convo.private ? `<div class="msgs-note">${esc(L.privateNote)}</div>`
-    : convo.messages == null ? `<div class="msgs-note">${esc(L.loadingMsgs)}</div>`
-      : !convo.messages.length ? `<div class="msgs-note">${esc(L.noMessages)}</div>`
-        : renderTranscript(convo.messages, s.key);
-  const resume = resumeCmd(s);
-  const rows = [[L.modelL, s.model || '—']];
-  if (s.effort) rows.push(['思考档位', s.effort]);
-  if (Number.isFinite(s.cost)) rows.push(['成本', `$${s.cost.toFixed(3)}`, 1]);
-  if (s.turns) rows.push(['轮次', String(s.turns), 1]);
-  if (s.thinkingTokens > 999) rows.push(['思考量', fmtTokens(s.thinkingTokens), 1]);
-  if (s.images) rows.push(['图片', `${s.images} 张`, 1]);
-  if (s.run) rows.push(['记录', s.run]);
-  if (s.sessionId) rows.push(['工作阶段', s.sessionId.slice(0, 8)]);
-  rows.push([L.folderL, s.cwd || '—']);
-  rows.push([L.today, s.today ? `${s.today.turns} ${L.turnsL} · ${fmtTokens(s.today.tokens)}` : '—', 1]);
-  const html = `
-    ${s.title && s.title !== s.project ? `<div class="dtitle">${esc(s.title)}</div>` : ''}
-    <div class="dstatus" style="--s:${statusColor(s.status)}"><i></i><b class="${s.status === 'thinking' ? 'ui-shimmer' : ''}">${esc(L[s.status] || s.status)}</b>${s.activity ? `<span class="act">${esc(s.activity)}</span>` : ''}${s.stuck ? `<span class="stuck">${esc(L.stuck(s.stuck))}</span>` : ''}</div>
-    <dl class="dmeta">
-      ${rows.map(([k, v, num]) => `<dt>${esc(k)}</dt><dd class="${k === L.folderL || k === '记录' ? 'mono' : ''}${num ? ' ui-num' : ''}" title="${esc(v)}">${esc(v)}</dd>`).join('')}
-      <dt></dt><dd class="ui-num" data-time="${esc(s.key)}"></dd>
-    </dl>
-    ${contextBar(s.context)}
-    ${resume ? `<div class="dactions"><button class="copy" data-copy="${esc(resume)}">${L.copy}</button></div>` : ''}
-    <div class="side-sec">全程 · 逐字稿</div>
-    ${msgs}`;
-  // The turn timer ticks on its own (tickTimes), so the panel only redraws when something changed.
-  if (body.dataset.html !== html) {
-    body.innerHTML = html; body.dataset.html = html;
-    const t = body.querySelector('[data-time]'); if (t) t.textContent = timeLabel(s, now);
-    if (scrollDown || nearBottom) body.scrollTop = body.scrollHeight;
-  }
-}
-const GEAR = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>';
-
-async function loadConvo(s, target = convo, done) {
-  const key = s.key, at = s.lastEventAt;
-  target.busy = true;
-  try {
-    const r = await fetch(`/api/transcript?key=${encodeURIComponent(key)}`);
-    const d = await r.json().catch(() => ({}));
-    if (target.key !== key) return;
-    target.key = key;
-    target.at = at;
-    target.messages = Array.isArray(d.messages) ? d.messages : [];
-    target.private = !!d.private;
-    target.busy = false;
-  } catch {
-    if (target.key === key) target.busy = false;
-    return;
-  }
-  if (done) done();
-  else if (sel === key) renderDetail();
-}
-
-document.getElementById('sideHide').addEventListener('click', () => setSide(false));
-document.getElementById('sideTab').addEventListener('click', () => setSide(true));
-document.getElementById('sideBack').addEventListener('click', closeDetail);
-document.getElementById('sideRows').addEventListener('mouseleave', (e) => { if (e.currentTarget.dataset.stale) renderSide(); });
-document.getElementById('sideRows').addEventListener('click', (e) => {
-  const b = e.target.closest('.srow'); if (b) openDetail(b.dataset.key);
-});
-document.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('input, select, textarea, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === 'Escape' && state.full && sel) closeDetail();
-});
-addEventListener('resize', () => { if (!state.full) return; measureBar(); office?.setInset(panelInset(), false); });
+addEventListener('resize', measureBar);
 if (state.full) {
   document.body.classList.add('full');
   requestAnimationFrame(measureBar);
-  // On a phone the panel would cover the office, so it starts folded away.
-  setSide(state.side && !matchMedia('(max-width: 760px)').matches, false);
-  syncFull();
 }
-
 setInterval(tickTimes, 1000);
-
-// ---- 拓扑 view: the brain in the middle-left, its hired hands fanned out to the
-// right, each edge a delegation that is still running (dashes crawl) or done.
-const topoCanvas = document.getElementById('topoCanvas');
-const topoCtx = topoCanvas.getContext('2d');
-let topoGroups = [];
-let topoRects = [];
-let topoRaf = 0;
-const TOPO = { rowH: 40, rowGap: 12, rootW: 236, kidW: 268, gapX: 92, padX: 28, clusterGap: 26 };
-
-function topoOf(list) {
-  const byId = new Map();
-  for (const s of list) {
-    byId.set(s.id, s);
-    if (s.sessionId) byId.set(s.sessionId, s);
-  }
-  const kids = new Map();
-  const roots = [];
-  for (const s of list) {
-    const p = s.parentId ? byId.get(s.parentId) : null;
-    if (p && p.key !== s.key) {
-      if (!kids.has(p.key)) kids.set(p.key, []);
-      kids.get(p.key).push(s);
-    } else roots.push(s);
-  }
-  const order = (a, b) => (b.startedAt || 0) - (a.startedAt || 0);
-  const clusters = roots.map((r) => ({ root: r, kids: (kids.get(r.key) || []).sort(order) }));
-  // Real delegation trees first, then whoever is still running; idle leftovers last.
-  const rank = (c) => (c.kids.length ? 0 : ACTIVE.has(c.root.status) ? 1 : 2);
-  return clusters.sort((a, b) => rank(a) - rank(b) || order(a.root, b.root));
-}
-
-function topoTrunc(ctx, text, max) {
-  let t = String(text || '');
-  if (ctx.measureText(t).width <= max) return t;
-  while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1);
-  return t + '…';
-}
-
-function paintTopo(t) {
-  const el = topoCanvas;
-  const wrap = document.getElementById('topoWrap');
-  const viewW = Math.max(420, wrap.clientWidth || 900);
-  const viewH = Math.max(320, wrap.clientHeight || 600);
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const groups = topoGroups;
-  const colW = TOPO.rootW + TOPO.gapX + TOPO.kidW;
-  const { ink, muted, faint, line, panel, bg } = themeColors;
-  topoRects = [];
-
-  // Pack clusters into columns top-down, then let the wrapper scroll. Type stays
-  // at 1:1 instead of shrinking to an unreadable smear when there are dozens.
-  const measured = groups.map((g) => {
-    const n = Math.max(1, g.kids.length);
-    return { g, h: n * TOPO.rowH + (n - 1) * TOPO.rowGap };
-  });
-  const limit = viewH - TOPO.padX * 2;
-  const cols = [[]];
-  let colH = 0;
-  for (const m of measured) {
-    if (cols[cols.length - 1].length && colH + m.h > limit) { cols.push([]); colH = 0; }
-    cols[cols.length - 1].push(m);
-    colH += m.h + TOPO.clusterGap;
-  }
-  const colHeights = cols.map((c) => c.reduce((n, m) => n + m.h + TOPO.clusterGap, 0) - TOPO.clusterGap);
-  const canvasW = Math.max(viewW, cols.length * colW + TOPO.padX * 2 - TOPO.gapX);
-  const canvasH = Math.max(viewH, Math.max(0, ...colHeights) + TOPO.padX * 2);
-  el.style.width = `${canvasW}px`;
-  el.style.height = `${canvasH}px`;
-  if (el.width !== Math.round(canvasW * dpr) || el.height !== Math.round(canvasH * dpr)) {
-    el.width = Math.round(canvasW * dpr);
-    el.height = Math.round(canvasH * dpr);
-  }
-  const c = topoCtx;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.clearRect(0, 0, canvasW, canvasH);
-  c.fillStyle = bg; c.fillRect(0, 0, canvasW, canvasH);
-
-  if (!groups.length) {
-    c.fillStyle = faint; c.font = '13px ui-sans-serif, "PingFang TC", sans-serif'; c.textAlign = 'center';
-    c.fillText('目前没有主控或子代理在运作', canvasW / 2, canvasH / 2);
-    return;
-  }
-
-  c.textBaseline = 'alphabetic';
-  cols.forEach((column, ci) => {
-    const x0 = TOPO.padX + ci * colW;
-    let y = TOPO.padX;
-    for (const { g, h } of column) {
-      const rootY = y + (h - TOPO.rowH) / 2;
-      const kidX = x0 + TOPO.rootW + TOPO.gapX;
-      // edges first so the cards sit on top of them
-      g.kids.forEach((k, i) => {
-        const ky = y + i * (TOPO.rowH + TOPO.rowGap) + TOPO.rowH / 2;
-        const active = ACTIVE.has(k.status);
-        const col = themeColors.st[k.status] || faint;
-        c.strokeStyle = col; c.globalAlpha = active ? .8 : .35;
-        c.lineWidth = 1.2;
-        if (active) { c.setLineDash([5, 4]); c.lineDashOffset = -(t / 55) % 9; } else c.setLineDash([]);
-        const x1 = x0 + TOPO.rootW, y1 = rootY + TOPO.rowH / 2, x2 = kidX, y2 = ky;
-        const mx = (x1 + x2) / 2;
-        c.beginPath(); c.moveTo(x1, y1); c.bezierCurveTo(mx, y1, mx, y2, x2, y2); c.stroke();
-        c.setLineDash([]); c.globalAlpha = 1;
-      });
-      drawTopoBox(c, x0, rootY, TOPO.rootW, TOPO.rowH, g.root, 1, ink, muted, faint, line, panel, t);
-      g.kids.forEach((k, i) => {
-        const ky = y + i * (TOPO.rowH + TOPO.rowGap);
-        drawTopoBox(c, kidX, ky, TOPO.kidW, TOPO.rowH, k, 1, ink, muted, faint, line, panel, t);
-      });
-      y += h + TOPO.clusterGap;
-    }
-  });
-}
-function drawTopoBox(c, x, y, w, h, s, scale, ink, muted, faint, line, panel, t) {
-  const col = themeColors.st[s.status] || faint;
-  const active = ACTIVE.has(s.status);
-  c.save();
-  // paper card
-  c.fillStyle = panel; c.globalAlpha = 0.96;
-  c.strokeStyle = line; c.lineWidth = 1;
-  const r = 3;
-  c.beginPath();
-  c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
-  c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
-  c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y);
-  c.closePath(); c.fill(); c.globalAlpha = 1; c.stroke();
-  // status spine
-  c.fillStyle = col; c.fillRect(x, y + 1, Math.max(2, 3 * scale), h - 2);
-  // pulse for live ones
-  if (active) {
-    const a = 0.18 + 0.14 * Math.sin(t / 420);
-    c.globalAlpha = a; c.fillStyle = col; c.fillRect(x, y, w, h); c.globalAlpha = 1;
-  }
-  const padX = 10 * scale;
-  c.font = `${Math.max(10, 12.5 * scale)}px ui-sans-serif, "PingFang TC", sans-serif`;
-  const tag = taskTag(s);
-  const name = tag ? `${tag} · ${s.project || ''}` : (s.project || AGENT_NAME[s.agent] || s.agent);
-  c.fillStyle = ink; c.textBaseline = 'alphabetic';
-  c.fillText(topoTrunc(c, name, w - padX * 2), x + padX, y + h * 0.46);
-  // status line
-  const fits = Math.max(8, 10.5 * scale);
-  c.font = `${fits}px ui-monospace, "PingFang TC", monospace`;
-  const st = L[s.status] || s.status;
-  const extra = (s.activity || '').replace(/\s+/g, ' ').slice(0, 46);
-  c.fillStyle = muted;
-  c.fillText(topoTrunc(c, `${st}${extra ? ' · ' + extra : ''}`, w - padX * 2), x + padX, y + h * 0.82);
-  c.restore();
-  topoRects.push({ x, y, w, h, key: s.key });
-}
-function topoLoop(t) {
-  if (state.view !== 'topo') { cancelAnimationFrame(topoRaf); topoRaf = 0; return; }
-  paintTopo(t);
-  topoRaf = requestAnimationFrame(topoLoop);
-}
-function drawTopo() {
-  const list = visible();
-  topoGroups = topoOf(list);
-  paintTopo(performance.now());
-  if (!topoRaf) topoRaf = requestAnimationFrame(topoLoop);
-}
-topoCanvas.addEventListener('click', (e) => {
-  const r = topoCanvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  const hit = topoRects.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-  if (hit) openDetail(hit.key);
-});
-topoCanvas.addEventListener('mousemove', (e) => {
-  const r = topoCanvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  const hit = topoRects.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-  topoCanvas.style.cursor = hit ? 'pointer' : 'default';
-});
-addEventListener('resize', () => { if (state.view === 'topo') drawTopo(); });
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  readThemeColors();
-  window.dispatchEvent(new Event('wmad:theme'));
-  if (state.view === 'topo') drawTopo();
-});
 
 // ---- image lightbox: thumbnails from the run log open full size
 const lightbox = document.getElementById('lightbox');
@@ -2147,9 +1387,6 @@ document.addEventListener('click', (e) => {
   if (lightbox.classList.contains('on') && (e.target === lightbox || e.target.closest('#lightbox'))) {
     lbClose();
   }
-  // a card in the list view opens that agent, like clicking its person does
-  const cardEl = e.target.closest('#main .card[data-key]');
-  if (cardEl && !e.target.closest('[data-copy]')) openDetail(cardEl.dataset.key);
 });
 document.addEventListener('keydown', (e) => {
   if (!lightbox.classList.contains('on')) return;

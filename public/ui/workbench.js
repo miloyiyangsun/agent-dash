@@ -1,10 +1,14 @@
 // workbench.js — 工作台视图（T2 三栏骨架 / T3 左栏任务树）。
-// The main script owns state/data; this file draws the three-column stage, the
-// task tree, and reuses its transcript renderer (renderTranscript / loadConvo).
+// The main script owns state/data; this file draws the three-column stage and
+// the task tree, and hands the middle/right columns to detail.js and aside.js.
 (() => {
   'use strict';
 
-  const t = (k) => (typeof L !== 'undefined' && L[k] != null ? L[k] : (window.I18N?.en?.[k] ?? k));
+  const t = (k) => {
+    const lang = typeof langCode !== 'undefined' ? langCode : 'en';
+    const dict = typeof L !== 'undefined' ? L : null;
+    return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
+  };
   const esc = (s) => (typeof window.esc === 'function' ? window.esc(s) : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const dotClass = (st) => (st === 'idle' ? 'st-interrupted' : `st-${st || 'interrupted'}`);
 
@@ -22,11 +26,11 @@
     idle: '--st-interrupted',
   };
   const STATUS_FILTERS = [
-    { key: 'all', label: '全部' },
-    { key: 'active', label: '进行中' },
-    { key: 'needsYou', label: '需要你' },
-    { key: 'done', label: '已完成' },
-    { key: 'error', label: '出错' },
+    { key: 'all', i18n: 'wbFilterAll' },
+    { key: 'active', i18n: 'wbFilterActive' },
+    { key: 'needsYou', i18n: 'wbFilterNeeds' },
+    { key: 'done', i18n: 'wbFilterDone' },
+    { key: 'error', i18n: 'wbFilterError' },
   ];
   const FILTER_ALIAS = {
     all: 'all',
@@ -130,6 +134,22 @@
     return s.length <= 14 && /\d/.test(s) && /^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*$/.test(s);
   }
 
+  // A title that only says when or where is no title: "2026-11-15",
+  // "2026_11_15 10:32", "D:\\work\\app" all fall back to the project name.
+  const DATE_TITLE_RE = /^\d{4}[-_./年]\d{1,2}[-_./月]\d{1,2}日?(?:[ T]\d{1,2}[:：]\d{2}(?::\d{2})?(?:\.\d+)?Z?)?$/;
+  function isDateTitle(text) {
+    return DATE_TITLE_RE.test(String(text || '').trim());
+  }
+  const PATH_TITLE_RE = /^(?:[A-Za-z]:[\\/]|\\\\|\/|~[\\/]|\.{1,2}[\\/])[^\n]*$/;
+  const REL_PATH_TITLE_RE = /^(?:[\w.@+-]+[\\/])+[\w.@+-]*$/;
+  function isPathTitle(text) {
+    const s = String(text || '').trim().replace(/^["'`]|["'`]$/g, '');
+    return PATH_TITLE_RE.test(s) || REL_PATH_TITLE_RE.test(s);
+  }
+  function hhmm(ms) {
+    return new Date(ms).toLocaleTimeString(typeof langCode !== 'undefined' ? langCode : undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
   // Returns { tag, title }. deepseek runs take the task line out of the prompt;
   // ordinary sessions prefer their own title, then summary / firstPrompt /
   // prompt, and only fall back to the project name when all of those are noise.
@@ -153,6 +173,7 @@
     const noise = (text) => {
       const t = String(text || '').trim();
       if (NOISE_TITLES.has(t.toLowerCase().replace(/[.。]+$/, ''))) return true;
+      if (isDateTitle(t) || isPathTitle(t)) return true;
       return /^This session is being continued\b/i.test(t) ||
         /^Caveat: The messages below\b/i.test(t) ||
         /^\[Request interrupted\b/i.test(t);
@@ -199,6 +220,10 @@
       }
     }
     if (!title) title = s.project || s.agentName || s.agent || '';
+    if (isDateTitle(title)) {
+      const at = Number(s.startedAt) || Number(s.turnStartedAt) || Number(s.lastEventAt) || Date.now();
+      title = t('untitledSession')(hhmm(at));
+    }
     return { tag, title: clip(title, 36), fromReply };
   }
 
@@ -222,12 +247,12 @@
       try { return ago(ts, now); } catch { /* fall through */ }
     }
     const s = Math.max(0, Math.round((now - ts) / 1000));
-    if (s < 45) return '现在';
+    if (s < 45) return t('justNow');
     const m = Math.round(s / 60);
-    if (m < 60) return `${m} 分钟前`;
+    if (m < 60) return t('minutesAgo')(m);
     const h = Math.round(m / 60);
-    if (h < 24) return `${h} 小时前`;
-    return `${Math.round(h / 24)} 天前`;
+    if (h < 24) return t('hoursAgo')(h);
+    return t('daysAgo')(Math.round(h / 24));
   }
 
   function rowTime(s, now) {
@@ -247,26 +272,26 @@
 
   function secondLine(s, ti) {
     const st = s.status || 'idle';
-    if (st === 'waiting') return { text: '等你回复', cls: 'wb-wait', mono: false };
+    if (st === 'waiting') return { text: t('secondWaiting'), cls: 'wb-wait', mono: false };
     if (st === 'error') {
-      if (ti && ti.fromReply) return { text: '出错', cls: 'wb-err', mono: false };
-      const msg = plain(firstSentence(s.error)) || '出错';
+      if (ti && ti.fromReply) return { text: t('secondError'), cls: 'wb-err', mono: false };
+      const msg = plain(firstSentence(s.error)) || t('secondError');
       return { text: clip(msg, 90), cls: 'wb-err', mono: false };
     }
-    if (st === 'interrupted') return { text: '中断', cls: '', mono: false };
+    if (st === 'interrupted') return { text: t('secondInterrupted'), cls: '', mono: false };
     if (st === 'done') {
       // When the title itself came from the reply, repeating it here would be
       // noise; the check mark plus the state is enough.
-      if (ti && ti.fromReply) return { text: '✓ 已完成', cls: '', mono: false };
+      if (ti && ti.fromReply) return { text: t('secondDone'), cls: '', mono: false };
       const msg = plain(firstSentence(s.reply));
-      return { text: msg ? '✓ ' + clip(msg, 90) : '✓ 已完成', cls: '', mono: false };
+      return { text: msg ? '✓ ' + clip(msg, 90) : t('secondDone'), cls: '', mono: false };
     }
     if (ACTIVE.has(st)) {
       const act = plain(squash(s.activity));
       if (act) return { text: clip(act, 90), cls: '', mono: true };
       return { text: (typeof L !== 'undefined' && L[st]) || st, cls: '', mono: false };
     }
-    return { text: '待命', cls: '', mono: false };
+    return { text: t('secondIdle'), cls: '', mono: false };
   }
 
   function highlight(text, q) {
@@ -428,7 +453,7 @@
     el.type = 'button';
     el.className = 'wb-task';
     el.dataset.key = s.key;
-    el.innerHTML = '<span class="wb-l1"><span class="ui-dot st-interrupted"></span><span class="wb-title-wrap"><span class="ui-chip wb-tag" hidden></span><span class="wb-note" hidden>（无原文）</span><span class="wb-task-title"></span></span><span class="wb-task-time ui-num"></span></span><span class="wb-l2"></span>';
+    el.innerHTML = `<span class="wb-l1"><span class="ui-dot st-interrupted"></span><span class="wb-title-wrap"><span class="ui-chip wb-tag" hidden></span><span class="wb-note" hidden>${esc(t('noOriginal'))}</span><span class="wb-task-title"></span></span><span class="wb-task-time ui-num"></span></span><span class="wb-l2"></span>`;
     return {
       el,
       dot: el.querySelector('.ui-dot'),
@@ -462,7 +487,7 @@
       entry.tagEl.hidden = !ti.tag;
       entry.tag = ti.tag;
     }
-    const note = ti.fromReply ? '（无原文）' : '';
+    const note = ti.fromReply ? t('noOriginal') : '';
     if (entry.note !== note) {
       entry.noteEl.textContent = note;
       entry.noteEl.hidden = !note;
@@ -532,7 +557,7 @@
   function updateGroup(entry, g, now, collapsed) {
     const master = g.kind === 'master';
     const ti = master ? titleOf(g.master) : null;
-    const titleText = master ? ti.title : (g.kind === 'other' ? '其他会话' : '未归属');
+    const titleText = master ? ti.title : (g.kind === 'other' ? t('wbOther') : t('wbUnassigned'));
     const titleHtml = master ? highlight(titleText, query) : esc(titleText);
     if (entry.titleHtml !== titleHtml) {
       entry.titleEl.innerHTML = titleHtml;
@@ -616,7 +641,7 @@
       b.type = 'button';
       b.className = 'ui-chip wb-fchip';
       b.dataset.wbStatus = f.key;
-      b.innerHTML = `<span>${esc(f.label)}</span><span class="ui-num"></span>`;
+      b.innerHTML = `<span>${esc(t(f.i18n))}</span><span class="ui-num"></span>`;
       b.addEventListener('click', () => {
         statusFilter = f.key;
         render();
@@ -648,6 +673,8 @@
     for (const f of STATUS_FILTERS) {
       const chip = statusChips.get(f.key);
       if (!chip) continue;
+      const lbl = chip.querySelector('span');
+      if (lbl && lbl.textContent !== t(f.i18n)) lbl.textContent = t(f.i18n);
       const n = chip.querySelector('.ui-num');
       if (n) n.textContent = String(counts[f.key] || 0);
       chip.classList.toggle('is-accent', statusFilter === f.key);
@@ -657,7 +684,7 @@
     const countsByAgent = new Map();
     for (const s of sessions) countsByAgent.set(s.agent, (countsByAgent.get(s.agent) || 0) + 1);
     const agents = [...countsByAgent.keys()].sort((a, b) => agentLabel(a).localeCompare(agentLabel(b)));
-    const sig = agents.join('|');
+    const sig = agents.join('|') + '|' + (typeof langCode !== 'undefined' ? langCode : '');
     if (sig !== agentSig) {
       agentSig = sig;
       agentRowEl.textContent = '';
@@ -671,7 +698,7 @@
         agentRowEl.appendChild(b);
         agentChips.set(value, b);
       };
-      add('', '全部');
+      add('', t('wbFilterAll'));
       for (const a of agents) add(a, agentLabel(a));
     }
     for (const [a, chip] of agentChips) {
@@ -926,10 +953,10 @@
       const isEmpty = desiredGroups.length === 0;
       if (isEmpty) {
         if (!emptyEl) emptyEl = makeEmpty();
-        const msg = sessions.length ? '没有符合筛选条件的任务' : '暂无会话';
+        const msg = sessions.length ? t('wbNoMatch') : t('wbNoSessions');
         if (emptyEl.dataset.msg !== msg) {
           emptyEl.dataset.msg = msg;
-          emptyEl.innerHTML = `<p>${esc(msg)}</p><button type="button" class="ui-btn" data-wb-clear>清除筛选</button>`;
+          emptyEl.innerHTML = `<p>${esc(msg)}</p><button type="button" class="ui-btn" data-wb-clear>${esc(t('wbClearFilters'))}</button>`;
         }
         if (!emptyEl.isConnected) box.appendChild(emptyEl);
       } else if (emptyEl && emptyEl.isConnected) {
