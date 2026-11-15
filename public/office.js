@@ -50,10 +50,24 @@
   const PANTS = ['#34405a', '#2c2c34', '#4a3f35', '#3b4a3f'];
   const PANEL = ['#7d93c4', '#d98b6a', '#7fb08a', '#c9a24c'];
 
-  const STATUS_COLOR = {
+  // Status colours come from the CSS tokens so the office matches the lists
+  // and follows the theme; the old values are only a fallback.
+  const STATUS_FALLBACK = {
     thinking: '#8b6be6', tool: '#3b8ee0', typing: '#22a874', waiting: '#e09412',
     done: '#5f9a4c', error: '#de4b40', interrupted: '#9b9a94', idle: '#9b9a94',
   };
+  const STATUS_COLOR = { ...STATUS_FALLBACK };
+  function readStatusColors() {
+    let css;
+    try { css = getComputedStyle(document.documentElement); } catch { return; }
+    for (const k of Object.keys(STATUS_FALLBACK)) {
+      if (k === 'idle') continue;
+      STATUS_COLOR[k] = css.getPropertyValue(`--st-${k}`).trim() || STATUS_FALLBACK[k];
+    }
+    STATUS_COLOR.idle = css.getPropertyValue('--st-interrupted').trim() || STATUS_FALLBACK.idle;
+  }
+  readStatusColors();
+  addEventListener('wmad:theme', readStatusColors);
 
   const ACT_EMOJI = {
     coffee: '☕', water: '💧', fridge: '🍎', sink: '🫧', stool: '💬', couch: '💬', beanbag: '🎧',
@@ -228,7 +242,7 @@
       this.plan = this.buildPlan(0);
       this.cat = { x: this.plan.W - 3, y: this.plan.D - 2, path: [], until: 0, face: 1 };
       this.theme = matchMedia('(prefers-color-scheme: dark)');
-      this.onTheme = () => (this.pal = palette());
+      this.onTheme = () => { this.pal = palette(); readStatusColors(); };
       this.theme.addEventListener('change', this.onTheme);
 
       this.ro = new ResizeObserver(() => this.resize());

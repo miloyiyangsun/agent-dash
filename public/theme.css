@@ -1,48 +1,19 @@
 /* 和紙 — kraft-paper theme and the panels this fork adds.
-   Loaded after the built-in <style>, so plain overrides win. */
+   Colour values live in /ui/tokens.css; the old variable names stay here as
+   aliases so every rule that already uses them keeps working. */
 
 :root {
-  --bg: #e9e2d3;
-  --panel: #f9f6ee;
-  --ink: #262119;
-  --muted: #6f6759;
-  --faint: #9b9181;
-  --line: #d7cdb9;
-  --thinking: #7c6aa4;
-  --tool: #47667f;
-  --typing: #5d7a55;
-  --waiting: #b0752a;
-  --done: #5f7a52;
-  --error: #b0463a;
-  --idle: #9b9181;
-  --claude: #c0503c;
-  --deepseek: #4d6bfe;
-  --vermilion: #c0503c;
-  --indigo: #3c5a70;
-  --moss: #6b7a4f;
-  --gold: #a9813f;
-  --shadow: 0 1px 0 rgba(255, 255, 255, .6) inset, 0 1px 3px rgba(60, 45, 20, .07), 0 8px 24px rgba(60, 45, 20, .05);
-  --serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", "Iowan Old Style", Georgia, serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16150f;
-    --panel: #201e17;
-    --ink: #ece5d6;
-    --muted: #a49b89;
-    --faint: #6f6757;
-    --line: #37322a;
-    --thinking: #a294c9;
-    --tool: #7ba2bd;
-    --typing: #8fae86;
-    --waiting: #d9a054;
-    --done: #93b183;
-    --error: #d97362;
-    --idle: #6f6757;
-    --shadow: 0 1px 3px rgba(0, 0, 0, .3), 0 8px 28px rgba(0, 0, 0, .28);
-  }
+  --thinking: var(--st-thinking);
+  --tool: var(--st-tool);
+  --typing: var(--st-typing);
+  --waiting: var(--st-waiting);
+  --done: var(--st-done);
+  --error: var(--st-error);
+  --idle: var(--st-interrupted);
+  --indigo: var(--accent);
+  --shadow: var(--shadow-card);
+  --serif: var(--font-serif);
+  --mono: var(--font-mono);
 }
 
 /* Paper grain: one static SVG noise tile, no animation, no repaint cost. */
@@ -57,15 +28,16 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
-  body::after { mix-blend-mode: screen; opacity: .035; }
+  html:not([data-theme="light"]) body::after { mix-blend-mode: screen; opacity: .03; }
 }
+html[data-theme="dark"] body::after { mix-blend-mode: screen; opacity: .03; }
 
-body { background: var(--bg); font-family: ui-sans-serif, -apple-system, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif; }
-h1, section h2, .side-group, .side-sec, .dtitle, .tw-title, .blk-title { font-family: var(--serif); }
+body { background: var(--bg); font-family: var(--font-sans); }
+h1, section h2, .side-group, .side-sec, .dtitle, .tw-title, .blk-title { font-family: var(--font-serif); }
 h1 { font-weight: 500; letter-spacing: .04em; }
 h1 .kanji { font-size: 20px; }
 section h2 { letter-spacing: .18em; font-weight: 500; }
-.side-group, .side-sec { letter-spacing: .16em; font-weight: 500; font-family: var(--serif); }
+.side-group, .side-sec { letter-spacing: .16em; font-weight: 500; font-family: var(--font-serif); }
 
 .card, .office, .side, .settings-panel, .seg, .btn, .srow {
   border-radius: 3px;
@@ -173,12 +145,12 @@ details.fold > summary:hover::after { color: var(--ink); }
 
 #lightbox {
   position: fixed; inset: 0; z-index: 200; display: none;
-  background: color-mix(in srgb, #000 82%, transparent);
+  background: var(--scrim);
   align-items: center; justify-content: center; padding: 3vmin; cursor: zoom-out;
 }
 #lightbox.on { display: flex; }
-#lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: 0 24px 80px #000a; }
-#lightbox .cap { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #e8e2d4; font: 11.5px var(--mono); opacity: .8; }
+#lightbox img { max-width: 100%; max-height: 100%; border-radius: 2px; box-shadow: var(--shadow-float); }
+#lightbox .cap { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: var(--on-scrim); font: 11.5px var(--mono); opacity: .8; }
 
 /* ---- 拓扑 view (B) */
 #topoWrap { position: relative; }
@@ -201,7 +173,7 @@ body.full #viewSeg { display: inline-flex; }
 .seg button { letter-spacing: .06em; }
 .seg button.on { background: var(--ink); color: var(--bg); }
 body.full .side-head { padding: 12px 12px 10px 14px; }
-.side-head b { font-family: var(--serif); font-weight: 500; letter-spacing: .08em; }
+.side-head b { font-family: var(--font-serif); font-weight: 500; letter-spacing: .08em; }
 .icon-btn, .side-tab { border-radius: 2px; }
 
 /* 已下班 people are faint, as before, but warmer */

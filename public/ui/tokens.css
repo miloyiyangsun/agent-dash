@@ -1,0 +1,318 @@
+/* tokens.css — 「夜里的和纸」design tokens and the base UI primitives.
+   Loaded before theme.css. Colours come in two sets (light / dark) and follow
+   the system by default; html[data-theme] forces one or the other. */
+
+/* ---------- colour tokens: light ---------- */
+:root {
+  --bg: #ece5d6;
+  --panel: #f7f3ea;
+  --raised: #fffdf8;
+  --line: #d9cfbd;
+  --line-strong: #c4b79f;
+  --ink: #241f18;
+  --muted: #6c6355;
+  --faint: #9b917f;
+  --accent: #c4532a;
+  --accent-soft: rgba(196, 83, 42, .10);
+
+  /* status colours — same hues in both themes, pitched for the surface */
+  --st-thinking: #6f5a9e;
+  --st-tool: #3f6f93;
+  --st-typing: #4f7d44;
+  --st-waiting: #a8741f;
+  --st-done: #5c7550;
+  --st-error: #b0412f;
+  --st-interrupted: #8a8072;
+
+  /* event types: 委派 = accent, 工具结果 = muted, the rest borrow the status hues */
+  --ev-prompt: var(--accent);
+  --ev-think: var(--st-thinking);
+  --ev-tool: var(--st-tool);
+  --ev-result: var(--muted);
+  --ev-say: var(--st-typing);
+  --ev-final: var(--st-done);
+  --ev-error: var(--st-error);
+
+  /* surfaces, shadows and things drawn on top of colour */
+  --shadow-card: none;
+  --shadow-float: 0 12px 40px rgba(60, 45, 20, .12);
+  --shadow-knob: 0 1px 3px rgba(60, 45, 20, .28);
+  --scrim: rgba(0, 0, 0, .82);
+  --on-scrim: #ece5d6;
+  --on-accent: #fff;
+  --knob: #fff;
+
+  /* ---------- type ---------- */
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+  --font-sans: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+
+  --lh-body: 1.6;
+  --lh-list: 1.35;
+
+  /* ---------- 4px spacing grid ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+
+  --r-pill: 999px;
+  --r-ctl: 6px;
+  --r-card: 8px;
+}
+
+/* ---------- colour tokens: dark (system preference) ---------- */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --bg: #14110d;
+    --panel: #1b1712;
+    --raised: #231e18;
+    --line: #2f281f;
+    --line-strong: #43392c;
+    --ink: #ede5d6;
+    --muted: #a3977f;
+    --faint: #6e6455;
+    --accent: #e2703a;
+    --accent-soft: rgba(226, 112, 58, .14);
+
+    --st-thinking: #a48fd1;
+    --st-tool: #6ea8cf;
+    --st-typing: #8fc07e;
+    --st-waiting: #e5b24c;
+    --st-done: #7d9670;
+    --st-error: #e0634f;
+    --st-interrupted: #8a8072;
+
+    --shadow-float: 0 12px 40px rgba(0, 0, 0, .45);
+    --shadow-knob: 0 1px 3px rgba(0, 0, 0, .5);
+    --knob: #ede5d6;
+  }
+}
+
+/* ---------- colour tokens: dark (forced) ---------- */
+html[data-theme="dark"] {
+  --bg: #14110d;
+  --panel: #1b1712;
+  --raised: #231e18;
+  --line: #2f281f;
+  --line-strong: #43392c;
+  --ink: #ede5d6;
+  --muted: #a3977f;
+  --faint: #6e6455;
+  --accent: #e2703a;
+  --accent-soft: rgba(226, 112, 58, .14);
+
+  --st-thinking: #a48fd1;
+  --st-tool: #6ea8cf;
+  --st-typing: #8fc07e;
+  --st-waiting: #e5b24c;
+  --st-done: #7d9670;
+  --st-error: #e0634f;
+  --st-interrupted: #8a8072;
+
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, .45);
+  --shadow-knob: 0 1px 3px rgba(0, 0, 0, .5);
+  --knob: #ede5d6;
+}
+
+/* ---------- base components ---------- */
+
+/* pill label; .is-accent paints it with the vermilion accent */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  line-height: var(--lh-list);
+  white-space: nowrap;
+}
+.ui-chip.is-accent {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* status dot; pair with one of the seven .st-* classes */
+.ui-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ui-dot.st-thinking { color: var(--st-thinking); }
+.ui-dot.st-tool { color: var(--st-tool); }
+.ui-dot.st-typing { color: var(--st-typing); }
+.ui-dot.st-waiting { color: var(--st-waiting); }
+.ui-dot.st-done { color: var(--st-done); }
+.ui-dot.st-error { color: var(--st-error); }
+.ui-dot.st-interrupted { color: var(--st-interrupted); }
+
+/* live states breathe once every 2.4s */
+.ui-dot.st-thinking,
+.ui-dot.st-tool,
+.ui-dot.st-typing,
+.ui-dot.st-waiting {
+  animation: ui-breathe 2.4s ease-in-out infinite;
+}
+@keyframes ui-breathe {
+  0%, 100% { opacity: .45; }
+  50% { opacity: 1; }
+}
+
+/* secondary button */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: 28px;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  line-height: var(--lh-list);
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ui-btn:hover {
+  border-color: var(--muted);
+  background: var(--raised);
+  color: var(--ink);
+}
+.ui-btn:active {
+  background: var(--raised);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.ui-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-btn:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+/* segmented tabs; the selected item is --raised on --ink */
+.ui-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  background: var(--panel);
+}
+.ui-seg > button {
+  border: 0;
+  border-radius: calc(var(--r-ctl) - 2px);
+  background: none;
+  color: var(--muted);
+  padding: var(--sp-1) var(--sp-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  line-height: var(--lh-list);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.ui-seg > button:hover {
+  color: var(--ink);
+}
+.ui-seg > button.on,
+.ui-seg > button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--ink);
+}
+.ui-seg > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* text input */
+.ui-input {
+  width: 100%;
+  padding: 6px var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: var(--lh-list);
+}
+.ui-input::placeholder {
+  color: var(--faint);
+}
+.ui-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* keyboard hint */
+.ui-kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* numbers: counts, durations, costs, turns */
+.ui-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* a highlight sweeps across the text; used for 「思考中」 */
+.ui-shimmer {
+  background-image: linear-gradient(100deg, currentColor 38%, var(--ink) 50%, currentColor 62%);
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ui-shimmer 2.4s linear infinite;
+}
+@keyframes ui-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -4,7 +4,7 @@
 (() => {
   const S = {
     en: {
-      settings: "Settings", scene: "Scene", agents: "Agents", language: "Language",
+      settings: "Settings", scene: "Scene", agents: "Agents", language: "Language", theme: "Theme", themeAuto: "System", themeDark: "Dark", themeLight: "Light",
       showAgent: "Agent badges",
       pip: "Pop out",
       pipClose: "Close pop-out",
@@ -27,7 +27,7 @@
       doneNote: (p) => `${p} is done`,
     },
     'zh-TW': {
-      settings: "設定", scene: "場景", agents: "顯示哪些 Agent", language: "語言",
+      settings: "設定", scene: "場景", agents: "顯示哪些 Agent", language: "語言", theme: "主題", themeAuto: "跟隨系統", themeDark: "深色", themeLight: "淺色",
       showAgent: "Agent 標記",
       pip: "子母畫面",
       pipClose: "關閉子母畫面",
@@ -50,7 +50,7 @@
       doneNote: (p) => `${p} 完成了`,
     },
     'zh-CN': {
-      settings: "设置", scene: "场景", agents: "显示哪些 Agent", language: "语言",
+      settings: "设置", scene: "场景", agents: "显示哪些 Agent", language: "语言", theme: "主题", themeAuto: "跟随系统", themeDark: "深色", themeLight: "浅色",
       showAgent: "Agent 标记",
       pip: "画中画",
       pipClose: "关闭画中画",
@@ -73,7 +73,7 @@
       doneNote: (p) => `${p} 完成了`,
     },
     ja: {
-      settings: "設定", scene: "シーン", agents: "エージェント", language: "言語",
+      settings: "設定", scene: "シーン", agents: "エージェント", language: "言語", theme: "テーマ", themeAuto: "システム", themeDark: "ダーク", themeLight: "ライト",
       showAgent: "エージェントの印",
       pip: "ポップアウト",
       pipClose: "ポップアウトを閉じる",
@@ -96,7 +96,7 @@
       doneNote: (p) => `${p} が完了しました`,
     },
     ko: {
-      settings: "설정", scene: "장면", agents: "에이전트", language: "언어",
+      settings: "설정", scene: "장면", agents: "에이전트", language: "언어", theme: "테마", themeAuto: "시스템", themeDark: "어두움", themeLight: "밝음",
       showAgent: "에이전트 표시",
       pip: "팝아웃",
       pipClose: "팝아웃 닫기",
@@ -119,7 +119,7 @@
       doneNote: (p) => `${p} 완료`,
     },
     es: {
-      settings: "Ajustes", scene: "Escenario", agents: "Agentes", language: "Idioma",
+      settings: "Ajustes", scene: "Escenario", agents: "Agentes", language: "Idioma", theme: "Tema", themeAuto: "Sistema", themeDark: "Oscuro", themeLight: "Claro",
       showAgent: "Insignias de agentes",
       pip: "Ventana flotante",
       pipClose: "Cerrar ventana flotante",
@@ -142,7 +142,7 @@
       doneNote: (p) => `${p} terminó`,
     },
     fr: {
-      settings: "Réglages", scene: "Scène", agents: "Agents", language: "Langue",
+      settings: "Réglages", scene: "Scène", agents: "Agents", language: "Langue", theme: "Thème", themeAuto: "Système", themeDark: "Sombre", themeLight: "Clair",
       showAgent: "Badges des agents",
       pip: "Fenêtre flottante",
       pipClose: "Fermer la fenêtre flottante",
@@ -165,7 +165,7 @@
       doneNote: (p) => `${p} a terminé`,
     },
     de: {
-      settings: "Einstellungen", scene: "Szene", agents: "Agents", language: "Sprache",
+      settings: "Einstellungen", scene: "Szene", agents: "Agents", language: "Sprache", theme: "Thema", themeAuto: "System", themeDark: "Dunkel", themeLight: "Hell",
       showAgent: "Agent-Abzeichen",
       pip: "Mini-Fenster",
       pipClose: "Mini-Fenster schließen",
@@ -188,7 +188,7 @@
       doneNote: (p) => `${p} ist fertig`,
     },
     pt: {
-      settings: "Configurações", scene: "Cenário", agents: "Agentes", language: "Idioma",
+      settings: "Configurações", scene: "Cenário", agents: "Agentes", language: "Idioma", theme: "Tema", themeAuto: "Sistema", themeDark: "Escuro", themeLight: "Claro",
       showAgent: "Identificação dos agentes",
       pip: "Janela flutuante",
       pipClose: "Fechar janela flutuante",

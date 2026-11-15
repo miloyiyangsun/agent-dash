@@ -6,47 +6,7 @@
 <title>What's my agent doing</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👀</text></svg>">
 <style>
-  :root {
-    --bg: #f6f6f3;
-    --panel: #ffffff;
-    --ink: #1c1c1a;
-    --muted: #6d6d68;
-    --faint: #a3a39d;
-    --line: #e4e3dd;
-    --thinking: #7c5cdb;
-    --tool: #2f7dd1;
-    --typing: #1f9d6b;
-    --waiting: #d98a0b;
-    --done: #5b8a4a;
-    --error: #d1453b;
-    --idle: #a3a39d;
-    --claude: #c96442;
-    --codex: #10a37f;
-    --gemini: #4f7cf0;
-    --copilot: #8f5cf5;
-    --omp: #a96926;
-    --pi: #4f8eb3;
-    --antigravity: #0ea5e9;
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #141413;
-      --panel: #1e1e1c;
-      --ink: #ecebe6;
-      --muted: #a09f99;
-      --faint: #6b6a65;
-      --line: #2e2d2a;
-      --thinking: #a48bf0;
-      --tool: #5ea4ee;
-      --typing: #3fc48f;
-      --waiting: #f0a93a;
-      --done: #86b872;
-      --error: #f0675d;
-      --idle: #6b6a65;
-      --shadow: none;
-    }
-  }
+  /* Colour tokens live in /ui/tokens.css; theme.css keeps the legacy aliases. */
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html, body { margin: 0; background: var(--bg); color: var(--ink); }
@@ -83,7 +43,7 @@
   .settings[open] > summary { background: var(--line); }
   .settings[open] > summary::after { margin-top: 3px; transform: rotate(-135deg); }
   .filter-active { font-size: 11px; color: var(--tool); }
-  .settings-panel { position: absolute; z-index: 20; right: 0; top: calc(100% + 10px); width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 180px); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 12px 40px #0003; }
+  .settings-panel { position: absolute; z-index: 20; right: 0; top: calc(100% + 10px); width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 180px); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow-float); }
   .setting-group + .setting-group { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
   .setting-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 9px; }
   .setting-toggles { display: grid; gap: 12px; margin-top: 14px; }
@@ -126,7 +86,7 @@
   .title { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { display: flex; align-items: center; gap: 8px; color: var(--s); font-weight: 600; font-size: 13px; min-width: 0; }
   .status .lbl { white-space: nowrap; flex: none; }
-  .status .act { flex: 1 1 auto; color: var(--ink); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .status .act { flex: 1 1 auto; color: var(--ink); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: var(--font-mono); font-size: 12px; }
   .q, .r { font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
   .q::before { content: "› "; color: var(--faint); }
   .r { color: var(--ink); opacity: .85; }
@@ -144,9 +104,9 @@
   .today-note { margin-top: 12px; line-height: 1.5; }
   .ctx { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--faint); }
   .ctx .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-  .ctx .bar i { display: block; height: 100%; border-radius: 2px; background: var(--done); }
-  .ctx.warn .bar i { background: var(--waiting); }
-  .ctx.full .bar i { background: var(--error); }
+  .ctx .bar i { display: block; height: 100%; border-radius: 2px; background: var(--st-done); }
+  .ctx.warn .bar i { background: var(--st-waiting); }
+  .ctx.full .bar i { background: var(--st-error); }
   /* ---- toolbar menus and controls, styled to match (no browser defaults) */
   details.menu > summary { gap: 7px; }
   .scene-ico { display: inline-flex; }
@@ -169,7 +129,7 @@
   .scene-list .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* Agent rows: a checkbox square, the logo, the name and a count */
   #agentChips .box { flex: none; display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid color-mix(in srgb, var(--ink) 30%, var(--line)); border-radius: 4px; }
-  #agentChips .box .chk { width: 12px; height: 12px; opacity: 0; color: #fff; stroke-width: 2.6; }
+  #agentChips .box .chk { width: 12px; height: 12px; opacity: 0; color: var(--on-accent); stroke-width: 2.6; }
   #agentChips .on .box { background: var(--tool); border-color: var(--tool); }
   #agentChips .on .box .chk { opacity: 1; }
   #agentChips .chip-f > .chk, #agentChips button > svg.chk:last-child { display: none; }
@@ -181,7 +141,7 @@
   /* Switches instead of checkboxes */
   .prefs-panel label.tog { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
   .tog input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 36px; height: 21px; margin: 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 18%, var(--panel)); cursor: pointer; transition: background .18s; }
-  .tog input::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0004; transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+  .tog input::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 50%; background: var(--knob); box-shadow: var(--shadow-knob); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
   .tog input:checked { background: var(--tool); }
   .tog input:checked::after { transform: translateX(15px); }
   .tog input:focus-visible { outline: 2px solid var(--tool); outline-offset: 2px; }
@@ -205,16 +165,16 @@
   body.full #agentLegend { bottom: 44px; }
   body.full #main { display: none; }
   /* The video pop-out preview and its errors float over the office instead of pushing it down. */
-  body.full .pip-preview { position: fixed; z-index: 25; left: 16px; bottom: 84px; width: min(360px, calc(100vw - 32px)); margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: 0 12px 40px #0004; }
+  body.full .pip-preview { position: fixed; z-index: 25; left: 16px; bottom: 84px; width: min(360px, calc(100vw - 32px)); margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow-float); }
   body.full .pip-preview video { width: 100%; height: auto; border-radius: 8px; }
   body.full .pip-preview p { margin: 0 0 8px; font-size: 12px; }
-  body.full .pip-error { position: fixed; z-index: 25; left: 50%; top: calc(var(--bar, 53px) + 12px); transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 24px #0003; }
+  body.full .pip-error { position: fixed; z-index: 25; left: 50%; top: calc(var(--bar, 53px) + 12px); transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-float); }
   body.full .side { display: block; position: fixed; z-index: 15; right: 0; bottom: 0; top: var(--bar, 53px); width: 340px; border-left: 1px solid var(--line); background: var(--panel); transition: transform .32s cubic-bezier(.2, .8, .2, 1), box-shadow .32s; overflow: hidden; }
   body.full.side-closed { --side: 0px; }
   body.full.side-closed .side { transform: translateX(100%); box-shadow: none; }
   body.full.side-closed .side-tab { display: inline-flex; animation: tabIn .3s .18s both cubic-bezier(.2, .8, .2, 1); }
   @keyframes tabIn { from { opacity: 0; transform: translateX(12px); } }
-  .side-tab { position: fixed; z-index: 15; right: 12px; top: calc(var(--bar, 53px) + 12px); align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 600 13px inherit; cursor: pointer; box-shadow: 0 4px 16px #0002; }
+  .side-tab { position: fixed; z-index: 15; right: 12px; top: calc(var(--bar, 53px) + 12px); align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 600 13px inherit; cursor: pointer; box-shadow: var(--shadow-float); }
   .side-pane { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--panel); transition: transform .34s cubic-bezier(.2, .8, .2, 1), opacity .34s; }
   /* Layer two slides in over the list; the list eases left and fades. */
   #sideDetail { transform: translateX(100%); }
@@ -248,7 +208,7 @@
   .dmeta { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 10px 6px 12px; font-size: 12.5px; }
   .dmeta dt { color: var(--faint); }
   .dmeta dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dmeta dd.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .dmeta dd.mono { font-family: var(--font-mono); font-size: 11.5px; }
   .dstatus { display: flex; align-items: center; gap: 7px; margin: 8px 6px 0; font-size: 13px; flex-wrap: wrap; }
   .dstatus i { width: 8px; height: 8px; border-radius: 50%; background: var(--s); }
   .dstatus b { color: var(--s); }
@@ -261,7 +221,7 @@
   .msg { max-width: 92%; padding: 8px 11px; border-radius: 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg.user { align-self: flex-end; background: color-mix(in srgb, var(--tool) 16%, var(--panel)); }
   .msg.assistant { align-self: flex-start; background: color-mix(in srgb, var(--ink) 6%, var(--panel)); border: 1px solid var(--line); }
-  .msg.tool { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 3px 4px; color: var(--muted); font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .msg.tool { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 3px 4px; color: var(--muted); font: 11.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .msg .at { display: block; margin-top: 3px; font-size: 10.5px; color: var(--faint); }
   .msgs-note { margin: 12px 6px; font-size: 12.5px; color: var(--muted); }
   .side-sec { margin: 14px 6px 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -303,14 +263,14 @@
   .copy { margin-left: auto; border: 0; background: none; color: var(--faint); font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; flex: none; }
   .copy:hover { color: var(--ink); }
 
-  [data-s="thinking"] { --s: var(--thinking); }
-  [data-s="tool"] { --s: var(--tool); }
-  [data-s="typing"] { --s: var(--typing); }
-  [data-s="waiting"] { --s: var(--waiting); }
-  [data-s="done"] { --s: var(--done); }
-  [data-s="interrupted"] { --s: var(--idle); }
-  [data-s="error"] { --s: var(--error); }
-  [data-s="idle"] { --s: var(--idle); }
+  [data-s="thinking"] { --s: var(--st-thinking); }
+  [data-s="tool"] { --s: var(--st-tool); }
+  [data-s="typing"] { --s: var(--st-typing); }
+  [data-s="waiting"] { --s: var(--st-waiting); }
+  [data-s="done"] { --s: var(--st-done); }
+  [data-s="interrupted"] { --s: var(--st-interrupted); }
+  [data-s="error"] { --s: var(--st-error); }
+  [data-s="idle"] { --s: var(--st-interrupted); }
 
   .ind { width: 18px; height: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; flex: none; }
   .ind i { width: 4px; height: 4px; border-radius: 50%; background: var(--s); display: none; }
@@ -342,7 +302,7 @@
   .office-overlay { touch-action: none; }
   .tip { position: fixed; z-index: 10; width: 320px; max-width: calc(100vw - 24px); pointer-events: none; display: none; }
   .tip.pinned { pointer-events: auto; }
-  .tip .card { box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+  .tip .card { box-shadow: var(--shadow-float); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
@@ -359,7 +319,7 @@
   .ver code { background: var(--panel); border: 1px solid var(--line); padding: 2px 6px; border-radius: 6px; }
   .empty { text-align: center; color: var(--muted); padding: 60px 16px; border: 1px dashed var(--line); border-radius: 12px; }
   .empty code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
-  .conn { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--error); color: #fff; padding: 6px 14px; border-radius: 999px; font-size: 12.5px; display: none; }
+  .conn { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--error); color: var(--on-accent); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; display: none; }
   .conn.on { display: block; }
 
   /* The PiP iframe owns its animation clock, layout, and pointer events. */
@@ -379,6 +339,7 @@
   body.pip section:first-child { margin-top: 0; }
   body.pip .grid { grid-template-columns: 1fr; }
 </style>
+<link rel="stylesheet" href="/ui/tokens.css">
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
@@ -407,7 +368,7 @@
       <span class="toolbar-space" aria-hidden="true"></span>
       <button class="btn" id="pipBtn" hidden></button>
       <details class="settings menu" id="todayMenu">
-        <summary class="btn" aria-controls="todayPanel" data-a="today"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.2" height="7" rx="1"/><rect x="10.4" y="6" width="3.2" height="12" rx="1"/><rect x="15.8" y="13.5" width="3.2" height="4.5" rx="1"/></svg><span data-t="today"></span> <span class="today-tokens" id="todayTokens"></span></summary>
+        <summary class="btn" aria-controls="todayPanel" data-a="today"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.2" height="7" rx="1"/><rect x="10.4" y="6" width="3.2" height="12" rx="1"/><rect x="15.8" y="13.5" width="3.2" height="4.5" rx="1"/></svg><span data-t="today"></span> <span class="today-tokens ui-num" id="todayTokens"></span></summary>
         <div class="settings-panel today-panel" id="todayPanel"></div>
       </details>
       <details class="settings menu" id="agentMenu">
@@ -427,14 +388,24 @@
       <details class="settings menu" id="settingsMenu">
         <summary class="btn" aria-controls="settingsPanel" data-a="settings"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.6h-4l-.4 2.4A7.5 7.5 0 0 0 7.1 6.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h4l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/></svg><span data-t="settings"></span></summary>
         <div class="settings-panel prefs-panel" id="settingsPanel">
-          <div class="setting-toggles">
-            <label class="tog"><span data-t="subagents"></span><input type="checkbox" role="switch" id="showSub"></label>
-            <label class="tog" id="idleToggle"><span data-t="showIdle"></span><input type="checkbox" role="switch" id="showIdle"></label>
-            <label class="tog" id="agentBadgeToggle"><span data-t="showAgent"></span><input type="checkbox" role="switch" id="showAgent"></label>
-            <label class="tog" id="soundToggle"><span data-t="sound"></span><input type="checkbox" role="switch" id="sound"></label>
-            <label class="tog" id="notifyToggle"><span data-t="notify"></span><input type="checkbox" role="switch" id="notify"></label>
+          <div class="setting-group">
+            <span class="setting-label" data-t="theme"></span>
+            <div class="ui-seg" id="themeSeg" role="group" data-a="theme">
+              <button data-theme-v="auto" data-t="themeAuto"></button>
+              <button data-theme-v="dark" data-t="themeDark"></button>
+              <button data-theme-v="light" data-t="themeLight"></button>
+            </div>
           </div>
-          <p class="tog-note" id="notifyNote" data-t="notifyBlocked" hidden></p>
+          <div class="setting-group">
+            <div class="setting-toggles">
+              <label class="tog"><span data-t="subagents"></span><input type="checkbox" role="switch" id="showSub"></label>
+              <label class="tog" id="idleToggle"><span data-t="showIdle"></span><input type="checkbox" role="switch" id="showIdle"></label>
+              <label class="tog" id="agentBadgeToggle"><span data-t="showAgent"></span><input type="checkbox" role="switch" id="showAgent"></label>
+              <label class="tog" id="soundToggle"><span data-t="sound"></span><input type="checkbox" role="switch" id="sound"></label>
+              <label class="tog" id="notifyToggle"><span data-t="notify"></span><input type="checkbox" role="switch" id="notify"></label>
+            </div>
+            <p class="tog-note" id="notifyNote" data-t="notifyBlocked" hidden></p>
+          </div>
         </div>
       </details>
     </div>
@@ -457,7 +428,7 @@
   </div>
   <aside class="side" id="side" aria-label="Agents">
     <div class="side-pane" id="sideList">
-      <div class="side-head"><b id="sideTitle"></b><span class="side-count" id="sideCount"></span>
+      <div class="side-head"><b id="sideTitle"></b><span class="side-count ui-num" id="sideCount"></span>
         <button class="icon-btn" id="sideHide"><svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5L21 12l-6.5 6.5M3 12h17"/></svg></button></div>
       <div class="side-body" id="sideRows"></div>
     </div>
@@ -503,7 +474,7 @@ function applyLang(code) {
   document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = L[el.dataset.t]));
   document.querySelectorAll('[data-a]').forEach((el) => { el.setAttribute('aria-label', L[el.dataset.a]); el.title = L[el.dataset.a]; });
   const legend = document.getElementById('legend');
-  if (legend) legend.innerHTML = ['thinking', 'tool', 'typing', 'waiting', 'done', 'error']
+  if (legend) legend.innerHTML = ['thinking', 'tool', 'typing', 'waiting', 'done', 'error', 'interrupted', 'idle']
     .map((k) => `<span data-s="${k}"><span class="dot" style="color:var(--s)"></span>${L[k]}</span>`).join('');
   if (typeof renderLangMenu === 'function') renderLangMenu();
   if (typeof office !== 'undefined' && office) office.offDutyLabel = L.wentHome;
@@ -519,7 +490,7 @@ const store = (() => {
   return { get, set };
 })();
 
-const PREF_DEFAULTS = { view: 'office', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, side: true, lang: 'auto' };
+const PREF_DEFAULTS = { view: 'office', quality: 'mid', scene: 'office', agents: [], showSub: false, showIdle: false, showAgent: true, sound: true, notify: true, side: true, lang: 'auto', theme: 'auto' };
 function validAgentId(v) {
   return typeof v === 'string' && v !== 'all' && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(v) && !Object.hasOwn(Object.prototype, v);
 }
@@ -528,6 +499,7 @@ function validPreference(k, v) {
   if (typeof PREF_DEFAULTS[k] === 'boolean') return typeof v === 'boolean';
   if (k === 'view') return ['office', 'topo', 'list'].includes(v);
   if (k === 'quality') return ['mid', 'high'].includes(v);
+  if (k === 'theme') return ['auto', 'dark', 'light'].includes(v);
   // Which agents to show; none selected means all of them.
   if (k === 'agents') return Array.isArray(v) && v.length <= 32 && v.every(validAgentId);
   if (k === 'lang') return v === 'auto' || Object.hasOwn(I18N, v);
@@ -544,6 +516,47 @@ function readPreferences() {
     const v = store.get(k, d);
     return [k, validPreference(k, v) ? v : d];
   }));
+}
+// Theme: follow the system unless the person picked dark or light. Canvas
+// renderers cannot read CSS variables, so keep a colour cache refreshed
+// whenever the theme may have changed.
+let themeColors = null;
+function readThemeColors() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (n, fallback) => css.getPropertyValue(n).trim() || fallback;
+  themeColors = {
+    ink: v('--ink', '#241f18'),
+    muted: v('--muted', '#6c6355'),
+    faint: v('--faint', '#9b917f'),
+    line: v('--line', '#d9cfbd'),
+    panel: v('--panel', '#f7f3ea'),
+    bg: v('--bg', '#ece5d6'),
+    st: {
+      thinking: v('--st-thinking', '#6f5a9e'),
+      tool: v('--st-tool', '#3f6f93'),
+      typing: v('--st-typing', '#4f7d44'),
+      waiting: v('--st-waiting', '#a8741f'),
+      done: v('--st-done', '#5c7550'),
+      error: v('--st-error', '#b0412f'),
+      interrupted: v('--st-interrupted', '#8a8072'),
+      idle: v('--st-interrupted', '#8a8072'),
+    },
+  };
+}
+function syncTheme() {
+  document.querySelectorAll('#themeSeg button').forEach((b) => {
+    const on = b.dataset.themeV === state.theme;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+  });
+}
+function applyTheme() {
+  const t = state.theme;
+  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  readThemeColors();
+  syncTheme();
+  window.dispatchEvent(new Event('wmad:theme'));
 }
 const PIP = new URLSearchParams(location.search).get('pip') === '1';
 if (PIP) document.body.classList.add('pip');
@@ -571,6 +584,7 @@ const state = {
   prevStuck: new Set(),
   flash: new Set(),
 };
+applyTheme();
 let popout = null;
 
 const ACTIVE = new Set(['thinking', 'tool', 'typing']);
@@ -660,13 +674,13 @@ function renderToday() {
   const projects = Object.entries(t.projects).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
   panel.innerHTML = `
     <div class="today-big">
-      <div><b>${t.turns}</b><span>${esc(L.turnsL)}</span></div>
-      <div><b>${fmtTokens(t.tokens)}</b><span>${esc(L.tokensL)}</span></div>
-      <div><b>${t.agents}</b><span>${esc(L.agentsL)}</span></div>
+      <div><b class="ui-num">${t.turns}</b><span>${esc(L.turnsL)}</span></div>
+      <div><b class="ui-num">${fmtTokens(t.tokens)}</b><span>${esc(L.tokensL)}</span></div>
+      <div><b class="ui-num">${t.agents}</b><span>${esc(L.agentsL)}</span></div>
     </div>
-    ${agents.map(([a, v]) => `<div class="today-row">${agentLogo(a)}${esc(AGENT_NAME[a] || a)}<span class="n">${v.turns} ${esc(L.turnsL)} · ${fmtTokens(v.tokens)}</span></div>`).join('')}
+    ${agents.map(([a, v]) => `<div class="today-row">${agentLogo(a)}${esc(AGENT_NAME[a] || a)}<span class="n ui-num">${v.turns} ${esc(L.turnsL)} · ${fmtTokens(v.tokens)}</span></div>`).join('')}
     ${projects.length ? `<div class="today-head">${esc(L.topProjects)}</div>` : ''}
-    ${projects.map(([p, n]) => `<div class="today-row">${esc(p)}<span class="n">${n} ${esc(L.turnsL)}</span></div>`).join('')}
+    ${projects.map(([p, n]) => `<div class="today-row">${esc(p)}<span class="n ui-num">${n} ${esc(L.turnsL)}</span></div>`).join('')}
     <div class="today-note">${esc(L.summaryNote)}</div>`;
 }
 
@@ -686,10 +700,10 @@ function card(s, now) {
     <div class="top">
       <span class="agent ${esc(s.agent)}">${agentLogo(s.agent)}${esc(s.agentName || AGENT_NAME[s.agent] || s.agent)}</span>
       <span class="project" title="${esc(s.cwd)}">${esc(project)}</span>
-      <span class="time" data-time="${esc(s.key)}">${esc(timeLabel(s, now))}</span>
+      <span class="time ui-num" data-time="${esc(s.key)}">${esc(timeLabel(s, now))}</span>
     </div>
     ${title}
-    <div class="status"><span class="ind"><i></i><i></i><i></i></span><span class="lbl">${esc(L[s.status] || s.status)}</span>${act}${stuck}</div>
+    <div class="status"><span class="ind"><i></i><i></i><i></i></span><span class="lbl${s.status === 'thinking' ? ' ui-shimmer' : ''}">${esc(L[s.status] || s.status)}</span>${act}${stuck}</div>
     ${err}${q}${r}${ctx}
     <div class="foot"><span class="model">${esc((s.model || '') + sub)}</span>${resumeCmd(s) ? `<button class="copy" data-copy="${esc(resumeCmd(s))}">${L.copy}</button>` : ''}</div>
   </div>`;
@@ -709,10 +723,13 @@ function render() {
   const all = state.data.sessions.filter((s) => matchAgent(s) && (state.showSub || !s.subagent));
 
   const count = (f) => all.filter((s) => f(s.status)).length;
+  const hasError = all.some((s) => s.status === 'error');
   document.getElementById('summary').innerHTML = GROUPS.slice(0, 3).map((g) => {
     const n = count(g.match);
-    const color = g.key === 'needsYou' ? 'var(--waiting)' : g.key === 'working' ? 'var(--tool)' : 'var(--done)';
-    return `<span class="chip"><span class="dot" style="color:${color}"></span>${L[g.key]} <b>${n}</b></span>`;
+    const color = g.key === 'needsYou'
+      ? (hasError ? 'var(--st-error)' : 'var(--st-waiting)')
+      : g.key === 'working' ? 'var(--st-tool)' : 'var(--st-done)';
+    return `<span class="chip"><span class="dot" style="color:${color}"></span>${L[g.key]} <b class="ui-num">${n}</b></span>`;
   }).join('');
 
   renderToday();
@@ -769,7 +786,7 @@ function render() {
   main.innerHTML = groups.map((g) => {
     const items = list.filter((s) => g.match(s.status));
     if (!items.length) return '';
-    return `<section><h2>${esc(groupLabel(g.key))} <span class="n">${items.length}</span></h2><div class="grid">${items.map((s) => card(s, now)).join('')}</div></section>`;
+    return `<section><h2>${esc(groupLabel(g.key))} <span class="n ui-num">${items.length}</span></h2><div class="grid">${items.map((s) => card(s, now)).join('')}</div></section>`;
   }).join('');
 }
 
@@ -871,6 +888,12 @@ document.getElementById('qualSeg').addEventListener('click', (e) => {
 document.getElementById('viewSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   state.view = b.dataset.v; store.set('view', state.view); hideTip(); syncControls(); render();
+});
+document.getElementById('themeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.theme = b.dataset.themeV; store.set('theme', state.theme);
+  applyTheme();
+  if (state.view === 'topo') drawTopo();
 });
 const showSub = document.getElementById('showSub');
 const showIdle = document.getElementById('showIdle');
@@ -1132,6 +1155,7 @@ popout = new OfficePopout({
 window.addEventListener('storage', (e) => {
   if (e.key !== null && !Object.keys(PREF_DEFAULTS).some((k) => e.key === 'wmad.' + k)) return;
   Object.assign(state, readPreferences());
+  applyTheme();
   renderLangMenu();
   hideTip();
   applyLang(chooseLang(state.data.lang));
@@ -1151,7 +1175,11 @@ let sel = null;              // key of the agent open in the panel
 let convo = { key: null, at: null, messages: null, private: false, busy: false };
 
 function statusColor(st) {
-  return { thinking: 'var(--thinking)', tool: 'var(--tool)', typing: 'var(--typing)', waiting: 'var(--waiting)', error: 'var(--error)', done: 'var(--done)' }[st] || 'var(--faint)';
+  return {
+    thinking: 'var(--st-thinking)', tool: 'var(--st-tool)', typing: 'var(--st-typing)',
+    waiting: 'var(--st-waiting)', done: 'var(--st-done)', error: 'var(--st-error)',
+    interrupted: 'var(--st-interrupted)', idle: 'var(--st-interrupted)',
+  }[st] || 'var(--faint)';
 }
 function hhmm(ms) {
   if (!ms) return '';
@@ -1253,7 +1281,7 @@ function renderSide() {
   const rows = GROUPS.map((g) => {
     const items = list.filter((s) => g.match(s.status));
     if (!items.length) return '';
-    return `<div class="side-group">${esc(groupLabel(g.key))} · ${items.length}</div>` + items.map((s, i) => {
+    return `<div class="side-group">${esc(groupLabel(g.key))} · <span class="ui-num">${items.length}</span></div>` + items.map((s, i) => {
       const act = s.stuck ? L.stuck(s.stuck) : s.activity || '';
       const tag = taskTag(s);
       const meta = sessionMeta(s);
@@ -1267,12 +1295,12 @@ function renderSide() {
         <span class="r-top">
           ${agentLogo(s.agent) || '<span></span>'}
           <span class="r-task">${tag ? `<span class="tag">${esc(tag)}</span>` : ''}${esc(s.project || AGENT_NAME[s.agent] || s.agent)}</span>
-          <span class="r-time" data-time="${esc(s.key)}"></span>
+          <span class="r-time ui-num" data-time="${esc(s.key)}"></span>
         </span>
-        <span class="r-state"><i></i><b>${esc(L[st] || st)}</b>${act ? `<span>${esc(act)}</span>` : ''}</span>
+        <span class="r-state"><i></i><b class="${st === 'thinking' ? 'ui-shimmer' : ''}">${esc(L[st] || st)}</b>${act ? `<span>${esc(act)}</span>` : ''}</span>
         ${q ? `<span class="r-prompt">${esc(q)}</span>` : ''}
         ${r && !ACTIVE.has(st) ? `<span class="r-reply">${esc(r)}</span>` : ''}
-        ${meta.length ? `<span class="r-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</span>` : ''}
+        ${meta.length ? `<span class="r-meta ui-num">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</span>` : ''}
       </button>`;
     }).join('');
   }).join('');
@@ -1371,20 +1399,20 @@ function renderDetail(scrollDown) {
   const resume = resumeCmd(s);
   const rows = [[L.modelL, s.model || '—']];
   if (s.effort) rows.push(['思考档位', s.effort]);
-  if (Number.isFinite(s.cost)) rows.push(['成本', `$${s.cost.toFixed(3)}`]);
-  if (s.turns) rows.push(['轮次', String(s.turns)]);
-  if (s.thinkingTokens > 999) rows.push(['思考量', fmtTokens(s.thinkingTokens)]);
-  if (s.images) rows.push(['图片', `${s.images} 张`]);
+  if (Number.isFinite(s.cost)) rows.push(['成本', `$${s.cost.toFixed(3)}`, 1]);
+  if (s.turns) rows.push(['轮次', String(s.turns), 1]);
+  if (s.thinkingTokens > 999) rows.push(['思考量', fmtTokens(s.thinkingTokens), 1]);
+  if (s.images) rows.push(['图片', `${s.images} 张`, 1]);
   if (s.run) rows.push(['记录', s.run]);
   if (s.sessionId) rows.push(['工作阶段', s.sessionId.slice(0, 8)]);
   rows.push([L.folderL, s.cwd || '—']);
-  rows.push([L.today, s.today ? `${s.today.turns} ${L.turnsL} · ${fmtTokens(s.today.tokens)}` : '—']);
+  rows.push([L.today, s.today ? `${s.today.turns} ${L.turnsL} · ${fmtTokens(s.today.tokens)}` : '—', 1]);
   const html = `
     ${s.title && s.title !== s.project ? `<div class="dtitle">${esc(s.title)}</div>` : ''}
-    <div class="dstatus" style="--s:${statusColor(s.status)}"><i></i><b>${esc(L[s.status] || s.status)}</b>${s.activity ? `<span class="act">${esc(s.activity)}</span>` : ''}${s.stuck ? `<span class="stuck">${esc(L.stuck(s.stuck))}</span>` : ''}</div>
+    <div class="dstatus" style="--s:${statusColor(s.status)}"><i></i><b class="${s.status === 'thinking' ? 'ui-shimmer' : ''}">${esc(L[s.status] || s.status)}</b>${s.activity ? `<span class="act">${esc(s.activity)}</span>` : ''}${s.stuck ? `<span class="stuck">${esc(L.stuck(s.stuck))}</span>` : ''}</div>
     <dl class="dmeta">
-      ${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="${k === L.folderL || k === '记录' ? 'mono' : ''}" title="${esc(v)}">${esc(v)}</dd>`).join('')}
-      <dt></dt><dd data-time="${esc(s.key)}"></dd>
+      ${rows.map(([k, v, num]) => `<dt>${esc(k)}</dt><dd class="${k === L.folderL || k === '记录' ? 'mono' : ''}${num ? ' ui-num' : ''}" title="${esc(v)}">${esc(v)}</dd>`).join('')}
+      <dt></dt><dd class="ui-num" data-time="${esc(s.key)}"></dd>
     </dl>
     ${contextBar(s.context)}
     ${resume ? `<div class="dactions"><button class="copy" data-copy="${esc(resume)}">${L.copy}</button></div>` : ''}
@@ -1482,9 +1510,7 @@ function paintTopo(t) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const groups = topoGroups;
   const colW = TOPO.rootW + TOPO.gapX + TOPO.kidW;
-  const css = getComputedStyle(document.documentElement);
-  const v = (n) => css.getPropertyValue(n).trim() || '#888';
-  const ink = v('--ink'), muted = v('--muted'), faint = v('--faint'), line = v('--line'), panel = v('--panel'), bg = v('--bg');
+  const { ink, muted, faint, line, panel, bg } = themeColors;
   topoRects = [];
 
   // Pack clusters into columns top-down, then let the wrapper scroll. Type stays
@@ -1532,7 +1558,7 @@ function paintTopo(t) {
       g.kids.forEach((k, i) => {
         const ky = y + i * (TOPO.rowH + TOPO.rowGap) + TOPO.rowH / 2;
         const active = ACTIVE.has(k.status);
-        const col = active ? v('--tool') : k.status === 'done' ? v('--done') : k.status === 'error' ? v('--error') : faint;
+        const col = themeColors.st[k.status] || faint;
         c.strokeStyle = col; c.globalAlpha = active ? .8 : .35;
         c.lineWidth = 1.2;
         if (active) { c.setLineDash([5, 4]); c.lineDashOffset = -(t / 55) % 9; } else c.setLineDash([]);
@@ -1541,17 +1567,17 @@ function paintTopo(t) {
         c.beginPath(); c.moveTo(x1, y1); c.bezierCurveTo(mx, y1, mx, y2, x2, y2); c.stroke();
         c.setLineDash([]); c.globalAlpha = 1;
       });
-      drawTopoBox(c, x0, rootY, TOPO.rootW, TOPO.rowH, g.root, 1, ink, muted, faint, line, panel, t, v);
+      drawTopoBox(c, x0, rootY, TOPO.rootW, TOPO.rowH, g.root, 1, ink, muted, faint, line, panel, t);
       g.kids.forEach((k, i) => {
         const ky = y + i * (TOPO.rowH + TOPO.rowGap);
-        drawTopoBox(c, kidX, ky, TOPO.kidW, TOPO.rowH, k, 1, ink, muted, faint, line, panel, t, v);
+        drawTopoBox(c, kidX, ky, TOPO.kidW, TOPO.rowH, k, 1, ink, muted, faint, line, panel, t);
       });
       y += h + TOPO.clusterGap;
     }
   });
 }
-function drawTopoBox(c, x, y, w, h, s, scale, ink, muted, faint, line, panel, t, v) {
-  const col = { thinking: v('--thinking'), tool: v('--tool'), typing: v('--typing'), waiting: v('--waiting'), done: v('--done'), error: v('--error') }[s.status] || faint;
+function drawTopoBox(c, x, y, w, h, s, scale, ink, muted, faint, line, panel, t) {
+  const col = themeColors.st[s.status] || faint;
   const active = ACTIVE.has(s.status);
   c.save();
   // paper card
@@ -1611,6 +1637,11 @@ topoCanvas.addEventListener('mousemove', (e) => {
   topoCanvas.style.cursor = hit ? 'pointer' : 'default';
 });
 addEventListener('resize', () => { if (state.view === 'topo') drawTopo(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  readThemeColors();
+  window.dispatchEvent(new Event('wmad:theme'));
+  if (state.view === 'topo') drawTopo();
+});
 
 // ---- image lightbox: thumbnails from the run log open full size
 const lightbox = document.getElementById('lightbox');
