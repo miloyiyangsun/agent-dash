@@ -17,15 +17,6 @@
   const EDIT = new Set(['Edit', 'MultiEdit', 'NotebookEdit']);
   const COPY_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>';
 
-  const S = {
-    key: null,
-    el: null,
-    propSig: '',
-    filesSig: '',
-    imgSig: '',
-    globalSig: '',
-  };
-
   // ---------- formatting ----------
 
   function fmtDur(ms) {
@@ -119,8 +110,81 @@
     return i >= 0 ? p.slice(i + 1) : p;
   }
 
+  // ---------- artifact extraction (shared with the drawer) ----------
+
+  function filesOf(messages) {
+    const map = new Map();
+    messages.forEach((m, idx) => {
+      if (!m || m.role !== 'tool') return;
+      const name = m.name || (/^([A-Za-z][\w.-]*)/.exec(String(m.text || '')) || [])[1] || '';
+      const isWrite = WRITE.has(name);
+      const isEdit = EDIT.has(name);
+      if (!isWrite && !isEdit) return;
+      let p = m.path;
+      if (!p) {
+        const raw = String(m.text || '').trim();
+        if (raw.startsWith(name + ' ')) p = raw.slice(name.length + 1).trim();
+      }
+      if (!p) return;
+      p = p.replace(/^["']|["']$/g, '').trim();
+      if (!p) return;
+      const key = p.toLowerCase();
+      const hit = map.get(key);
+      if (hit) {
+        hit.count += 1;
+        hit.idx = idx;
+        hit.action = isWrite ? t('fileWrite') : t('fileEdit');
+        hit.path = p;
+      } else {
+        map.set(key, { path: p, action: isWrite ? t('fileWrite') : t('fileEdit'), count: 1, idx });
+      }
+    });
+    return [...map.values()].sort((a, b) => b.idx - a.idx);
+  }
+
+  function fileRow(f) {
+    const dir = dirOf(f.path);
+    return `<button type="button" class="as-file" data-file-idx="${f.idx}" title="${esc(f.path)}">
+      <span class="as-file-main">
+        <span class="as-file-name">${esc(baseOf(f.path))}</span>
+        ${dir ? `<span class="as-file-dir">${esc(dir)}</span>` : ''}
+      </span>
+      <span class="as-pill ${f.action === t('fileWrite') ? 'is-write' : 'is-edit'}">${f.action}</span>
+      <span class="as-file-count ui-num">${f.count}</span>
+    </button>`;
+  }
+
+  function imagesOf(messages, key) {
+    const out = [];
+    for (const m of messages) {
+      if (!Array.isArray(m.images) || !m.images.length) continue;
+      m.images.forEach((im, i) => {
+        out.push({
+          url: `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`,
+          cap: t('imgCap')(m.name, i + 1),
+        });
+      });
+    }
+    return out;
+  }
+
+  // ---------- instance ----------
+
+  function createInstance(box, opts = {}) {
+  const S = {
+    key: null,
+    el: null,
+    propSig: '',
+    filesSig: '',
+    imgSig: '',
+    globalSig: '',
+  };
+  const artifacts = !!opts.artifacts;
+  let toastEl = null;
+  let toastTimer = 0;
+
   function convoFor(s) {
-    const c = window.WbDetail?.convo?.();
+    const c = typeof opts.convo === 'function' ? opts.convo() : window.WbDetail?.convo?.();
     if (!c || c.key !== s.key) return { messages: [], loaded: false };
     return c;
   }
@@ -129,10 +193,19 @@
 
   function ensure() {
     if (S.el && S.el.root.isConnected) return S.el;
-    const box = document.getElementById('wbAside');
     if (!box) return null;
-    box.innerHTML = `
-      <div class="as">
+    box.innerHTML = artifacts
+      ? `<div class="as as-artifacts">
+          <section class="as-sec" data-task data-files hidden>
+            <h3 class="as-title">${esc(t('asChangedFiles'))} <span class="as-count ui-num"></span></h3>
+            <div class="as-files"></div>
+          </section>
+          <section class="as-sec" data-task data-imgs hidden>
+            <h3 class="as-title">${esc(t('asImages'))} <span class="as-count ui-num"></span></h3>
+            <div class="as-grid"></div>
+          </section>
+        </div>`
+      : `<div class="as">
         <section class="as-sec" data-global>
           <h3 class="as-title">${esc(t('asToday'))}</h3>
           <dl class="as-kv as-today"></dl>
@@ -141,7 +214,7 @@
           <h3 class="as-title">${esc(t('asRecentDone'))}</h3>
           <div class="as-recent"></div>
         </section>
-        <section class="as-sec" data-task hidden>
+        <section class="as-sec" data-props hidden>
           <h3 class="as-title">${esc(t('asProps'))}</h3>
           <dl class="as-kv as-props"></dl>
         </section>
@@ -174,7 +247,8 @@
     if (S.el.root.dataset.mode === mode) return;
     S.el.root.dataset.mode = mode;
     for (const el of S.el.root.querySelectorAll('[data-global]')) el.hidden = mode !== 'global';
-    for (const el of S.el.root.querySelectorAll('[data-task]')) el.hidden = mode !== 'task';
+    for (const el of S.el.root.querySelectorAll('[data-task]')) el.hidden = mode === 'global';
+    for (const el of S.el.root.querySelectorAll('[data-props]')) el.hidden = mode !== 'task';
   }
 
   // ---------- properties ----------
@@ -223,48 +297,6 @@
 
   // ---------- changed files ----------
 
-  function filesOf(messages) {
-    const map = new Map();
-    messages.forEach((m, idx) => {
-      if (!m || m.role !== 'tool') return;
-      const name = m.name || (/^([A-Za-z][\w.-]*)/.exec(String(m.text || '')) || [])[1] || '';
-      const isWrite = WRITE.has(name);
-      const isEdit = EDIT.has(name);
-      if (!isWrite && !isEdit) return;
-      let p = m.path;
-      if (!p) {
-        const raw = String(m.text || '').trim();
-        if (raw.startsWith(name + ' ')) p = raw.slice(name.length + 1).trim();
-      }
-      if (!p) return;
-      p = p.replace(/^["']|["']$/g, '').trim();
-      if (!p) return;
-      const key = p.toLowerCase();
-      const hit = map.get(key);
-      if (hit) {
-        hit.count += 1;
-        hit.idx = idx;
-        hit.action = isWrite ? t('fileWrite') : t('fileEdit');
-        hit.path = p;
-      } else {
-        map.set(key, { path: p, action: isWrite ? t('fileWrite') : t('fileEdit'), count: 1, idx });
-      }
-    });
-    return [...map.values()].sort((a, b) => b.idx - a.idx);
-  }
-
-  function fileRow(f) {
-    const dir = dirOf(f.path);
-    return `<button type="button" class="as-file" data-file-idx="${f.idx}" title="${esc(f.path)}">
-      <span class="as-file-main">
-        <span class="as-file-name">${esc(baseOf(f.path))}</span>
-        ${dir ? `<span class="as-file-dir">${esc(dir)}</span>` : ''}
-      </span>
-      <span class="as-pill ${f.action === t('fileWrite') ? 'is-write' : 'is-edit'}">${f.action}</span>
-      <span class="as-file-count ui-num">${f.count}</span>
-    </button>`;
-  }
-
   function renderFiles(s) {
     if (!S.el) return;
     const c = convoFor(s);
@@ -282,20 +314,6 @@
   }
 
   // ---------- images ----------
-
-  function imagesOf(messages, key) {
-    const out = [];
-    for (const m of messages) {
-      if (!Array.isArray(m.images) || !m.images.length) continue;
-      m.images.forEach((im, i) => {
-        out.push({
-          url: `/api/ds/image?key=${encodeURIComponent(key)}&s=${im.start}&l=${im.len}`,
-          cap: t('imgCap')(m.name, i + 1),
-        });
-      });
-    }
-    return out;
-  }
 
   function renderImages(s) {
     if (!S.el) return;
@@ -356,9 +374,6 @@
 
   // ---------- copy toast ----------
 
-  let toastEl = null;
-  let toastTimer = 0;
-
   async function copyText(text) {
     if (!text) return;
     let ok = false;
@@ -380,7 +395,6 @@
       toastEl.className = 'dt-toast';
       document.body.appendChild(toastEl);
     }
-    const box = document.getElementById('wbAside');
     const r = box?.getBoundingClientRect();
     if (r) {
       toastEl.style.left = `${r.left + r.width / 2}px`;
@@ -401,19 +415,23 @@
     if (!s) {
       S.key = null;
       S.propSig = S.filesSig = S.imgSig = '';
+      if (artifacts) {
+        for (const el of S.el.root.querySelectorAll('[data-task]')) el.hidden = true;
+        return;
+      }
       setMode('global');
       renderGlobal(now);
       return;
     }
     S.key = s.key;
     setMode('task');
-    renderProps(s, now);
+    if (!artifacts) renderProps(s, now);
     renderFiles(s);
     renderImages(s);
   }
 
   function tick() {
-    if (!S.el || !S.key) return;
+    if (!S.el || !S.key || !S.el.props) return;
     const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     const s = list.find((x) => x.key === S.key);
     if (!s) return;
@@ -422,34 +440,72 @@
     if (d) d.textContent = durText(s, now);
   }
 
+  function selectKey(key) {
+    if (typeof opts.onSelect === 'function') opts.onSelect(key);
+    else window.Workbench?.select?.(key);
+  }
+
   function init() {
-    const box = document.getElementById('wbAside');
     if (!box) return;
     box.addEventListener('click', (e) => {
       const copy = e.target.closest('[data-as-copy]');
       if (copy) { copyText(copy.dataset.asCopy); return; }
       const master = e.target.closest('[data-master-key]');
-      if (master) { window.Workbench?.select?.(master.dataset.masterKey); return; }
+      if (master) { selectKey(master.dataset.masterKey); return; }
       const file = e.target.closest('[data-file-idx]');
-      if (file) { window.WbDetail?.jumpToBlock?.(Number(file.dataset.fileIdx)); return; }
+      if (file) {
+        const idx = Number(file.dataset.fileIdx);
+        if (typeof opts.jumpToBlock === 'function') opts.jumpToBlock(idx);
+        else window.WbDetail?.jumpToBlock?.(idx);
+        return;
+      }
       const recent = e.target.closest('[data-recent-key]');
-      if (recent) { window.Workbench?.select?.(recent.dataset.recentKey); }
+      if (recent) selectKey(recent.dataset.recentKey);
     });
-    window.addEventListener('wb:select', (e) => {
-      const key = e.detail?.key;
-      const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
-      render(key ? list.find((x) => x.key === key) || null : null);
-    });
-    window.addEventListener('wb:convo', (e) => {
-      if (!S.key || (e.detail && e.detail.key !== S.key)) return;
-      const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
-      const s = list.find((x) => x.key === S.key);
-      if (s) render(s);
-    });
-    setInterval(tick, 1000);
-    render(null);
+    if (!artifacts) {
+      window.addEventListener('wb:select', (e) => {
+        const key = e.detail?.key;
+        const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+        render(key ? list.find((x) => x.key === key) || null : null);
+      });
+      window.addEventListener('wb:convo', (e) => {
+        if (!S.key || (e.detail && e.detail.key !== S.key)) return;
+        const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
+        const s = list.find((x) => x.key === S.key);
+        if (s) render(s);
+      });
+      setInterval(tick, 1000);
+      render(null);
+    } else {
+      ensure();
+    }
   }
 
-  window.WbAside = { render, onLang: () => { S.el = null; S.propSig = S.filesSig = S.imgSig = S.globalSig = null; }, debug: () => ({ key: S.key, propSig: S.propSig, filesSig: S.filesSig, imgSig: S.imgSig }) };
   init();
+  return {
+    render,
+    onLang: () => { S.el = null; S.propSig = S.filesSig = S.imgSig = S.globalSig = null; },
+    debug: () => ({ key: S.key, propSig: S.propSig, filesSig: S.filesSig, imgSig: S.imgSig }),
+  };
+  }
+
+  let mainInst = null;
+  function render(box, s, now) {
+    if (!mainInst) {
+      if (!box) return;
+      mainInst = createInstance(box, {});
+    }
+    mainInst.render(s, now);
+  }
+
+  window.WbAside = {
+    render,
+    create: createInstance,
+    filesOf,
+    imagesOf,
+    filesHtml: (messages) => filesOf(messages).map(fileRow).join('') || `<div class="as-note">${esc(t('asNoFiles'))}</div>`,
+    imagesHtml: (messages, key) => imagesOf(messages, key).map((x) => `<button type="button" class="as-shot" data-shot="${esc(x.url)}" data-cap="${esc(x.cap)}" title="${esc(t('openImage'))}"><img loading="lazy" src="${esc(x.url)}" alt=""></button>`).join(''),
+    onLang: () => mainInst?.onLang(),
+    debug: () => (mainInst ? mainInst.debug() : null),
+  };
 })();

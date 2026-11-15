@@ -989,13 +989,13 @@
         const html = `<div class="wb-empty">${esc(t('wbEmptySelect'))}</div>`;
         if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
       }
-      window.WbAside?.render?.(null, now);
+      window.WbAside?.render?.(document.getElementById('wbAside'), null, now);
       return;
     }
     // T4a: the detail pane owns its own header, strip, tabs and transcript.
     if (window.WbDetail) window.WbDetail.render(box, s, now);
     // T5: the right column mirrors the selected task (properties / files / images).
-    window.WbAside?.render?.(s, now);
+    window.WbAside?.render?.(document.getElementById('wbAside'), s, now);
   }
 
   function setRight(open) {
@@ -1246,7 +1246,7 @@
 
   window.Workbench = {
     init, render, select, onLang: render, titleOf,
-    fmtDur, relTime, secondLine, buildTree, buildView, isCollapsed, setCollapsed,
+    fmtDur, relTime, secondLine, rowTime, searchHit, buildTree, buildView, isCollapsed, setCollapsed,
     STATUS_FILTERS, FILTER_ALIAS, debugOrder, debugGroups,
   };
   init();

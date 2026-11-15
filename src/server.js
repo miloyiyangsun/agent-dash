@@ -18,6 +18,8 @@ const STATIC = {
   '/ui/workbench.js': ['ui/workbench.js', 'text/javascript; charset=utf-8'],
   '/ui/aside.js': ['ui/aside.js', 'text/javascript; charset=utf-8'],
   '/ui/timeline.js': ['ui/timeline.js', 'text/javascript; charset=utf-8'],
+  '/ui/topo.js': ['ui/topo.js', 'text/javascript; charset=utf-8'],
+  '/ui/drawer.js': ['ui/drawer.js', 'text/javascript; charset=utf-8'],
 };
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
 // 3D models, served as-is (3D view only).

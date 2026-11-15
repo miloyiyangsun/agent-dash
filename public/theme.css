@@ -223,6 +223,18 @@ header#topbar.tb-hide-counts .tb-counts { display: none; }
 .wb-empty { display: flex; flex: 1; align-items: center; justify-content: center; min-height: calc(var(--sp-8) * 7); color: var(--muted); font-size: var(--fs-13); }
 #tl { flex: 1; min-height: 0; display: flex; background: var(--bg); }
 #tl .wb-empty { flex: 1; }
+/* T10: the agent drawer shrinks the stage on wide screens instead of covering it */
+@media (min-width: 1200px) {
+  body.drawer-open #officeWrap,
+  body.drawer-open #tl,
+  body.drawer-open #topo { margin-right: 400px; }
+  body.drawer-collapsed #officeWrap,
+  body.drawer-collapsed #tl,
+  body.drawer-collapsed #topo { margin-right: 26px; }
+}
+@media (max-width: 1199px) {
+  #agentDrawer .dr-panel { box-shadow: var(--shadow-float); }
+}
 .wb-right-tab, .wb-drawer-close { display: none; }
 .wb-right-tab {
   align-items: center;

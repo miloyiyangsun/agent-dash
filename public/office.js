@@ -61,7 +61,8 @@
   // CSS variables, so cache them and refresh whenever the theme changes.
   const UI_FALLBACK = {
     panel: '#f7f3ea', raised: '#fffdf8', line: '#d9cfbd', lineStrong: '#c4b79f',
-    ink: '#241f18', muted: '#6c6355', faint: '#9b917f', bg: '#ece5d6', dark: false,
+    ink: '#241f18', muted: '#6c6355', faint: '#9b917f', bg: '#ece5d6',
+    accent: '#c4532a', dark: false,
   };
   const UI = { ...UI_FALLBACK };
   const luminance = (hex) => {
@@ -76,7 +77,7 @@
   function readUiColors() {
     let css;
     try { css = getComputedStyle(document.documentElement); } catch { return; }
-    for (const k of ['panel', 'raised', 'line', 'lineStrong', 'ink', 'muted', 'faint', 'bg']) {
+    for (const k of ['panel', 'raised', 'line', 'lineStrong', 'ink', 'muted', 'faint', 'bg', 'accent']) {
       const name = k === 'lineStrong' ? '--line-strong' : `--${k}`;
       UI[k] = css.getPropertyValue(name).trim() || UI_FALLBACK[k];
     }
@@ -272,6 +273,7 @@
       this.visible = true;
       this.hit = [];
       this.hoverKey = null;
+      this.selectedKey = null;
       this.t = performance.now();
       this.pal = palette();
       this.plan = this.buildPlan(0);
@@ -1566,7 +1568,8 @@
     drawLabel(it) {
       const c = this.ctx;
       const r = it.labelRect, sp = it.label, s = it.p.s || {}, u = it.u;
-      this.roundRect(r.x, r.y, r.w, r.h, 6 * u, UI.panel, UI.lineStrong, 1 * u);
+      const selected = !!this.selectedKey && this.selectedKey === s.key;
+      this.roundRect(r.x, r.y, r.w, r.h, 6 * u, UI.panel, selected ? UI.accent : UI.lineStrong, (selected ? 1.6 : 1) * u);
       const cy = r.y + r.h / 2;
       let x = r.x + sp.pad;
       c.fillStyle = STATUS_COLOR[s.status] || UI.muted;

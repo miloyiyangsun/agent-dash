@@ -27,30 +27,6 @@
   const COPY_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>';
   const FOLDER_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5l2 2.5h8A1.5 1.5 0 0 1 21 9v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z"/></svg>';
 
-  const S = {
-    key: null,
-    session: null,
-    messages: [],
-    at: null,
-    loaded: false,
-    busy: false,
-    private: false,
-    tab: 'all',
-    blocks: [],
-    dots: [],
-    finalIdx: -1,
-    nearBottom: true,
-    newCount: 0,
-    firstLoad: true,
-    raf: 0,
-    el: null,
-  };
-
-  let tipEl = null;
-  let pillEl = null;
-  let toastEl = null;
-  let toastTimer = 0;
-
   // ---------- formatting ----------
 
   function fmtDur(ms) {
@@ -296,9 +272,80 @@
     return [m.role, m.kind || '', m.at || 0, m.name || '', text.length, text.slice(0, 48), res.length, res.slice(0, 24), imgs].join('|');
   }
 
+  // ---------- final-answer card (shared by the workbench and the drawer) ----------
+
+  function summaryCard(messages, { lines = 6 } = {}) {
+    const fi = messages.findIndex((m) => m.role === 'final');
+    if (fi < 0) return null;
+    const m = messages[fi];
+    const all = String(m.text || '').replace(/\r\n?/g, '\n').split('\n');
+    let from = 0;
+    while (from < all.length && !all[from].trim()) from++;
+    const clipped = all.slice(from + lines).some((line) => line.trim());
+    return { m, fi, text: all.slice(from).join('\n'), clipped };
+  }
+
+  function summaryCardHtml(messages, { lines = 6, expand = false } = {}) {
+    const c = summaryCard(messages, { lines });
+    if (!c) return '';
+    const head = `<div class="dt-sum-head"><span>${c.m.isError ? t('finalError') : t('finalAnswer')}</span>${expand ? '' : `<button type="button" class="dt-link" data-jump-final>${t('jumpFull')}</button>`}</div>`;
+    if (!expand) {
+      const preview = c.text.split('\n').slice(0, lines).join('\n');
+      return `<div class="dt-sum${c.m.isError ? ' is-error' : ''}">${head}<div class="dt-sum-text md${c.clipped ? ' is-clipped' : ''}">${renderMd(preview)}</div></div>`;
+    }
+    return `<div class="dt-sum dr-sum${c.m.isError ? ' is-error' : ''}">${head}<div class="dt-sum-text md dr-sum-text${c.clipped ? ' is-clipped' : ''}" style="--sum-lines:${lines}">${renderMd(c.text)}</div>${c.clipped ? `<button type="button" class="dt-link dr-sum-more" data-sum-expand>${t('drawerShowAll')}</button>` : ''}</div>`;
+  }
+
+  // ---------- instance ----------
+
+  // One renderer per container: the workbench middle column, and the agent
+  // drawer's compact transcript. State is per instance so both can coexist.
+  function createInstance(box, opts = {}) {
+  const S = {
+    key: null,
+    session: null,
+    messages: [],
+    at: null,
+    loaded: false,
+    busy: false,
+    private: false,
+    tab: 'all',
+    blocks: [],
+    dots: [],
+    finalIdx: -1,
+    nearBottom: true,
+    newCount: 0,
+    firstLoad: true,
+    raf: 0,
+    el: null,
+  };
+  const bare = !!opts.bare;
+  const compact = !!opts.compact;
+  const scrollEl = () => {
+    if (typeof opts.scrollEl === 'function') return opts.scrollEl();
+    if (opts.scrollEl) return opts.scrollEl;
+    return document.getElementById('wbMid');
+  };
+  let tipEl = null;
+  let pillEl = null;
+  let toastEl = null;
+  let toastTimer = 0;
+
   // ---------- skeleton ----------
 
   function skeleton(box) {
+    if (bare) {
+      box.innerHTML = `<div class="dt dt-bare${compact ? ' dt-compact' : ''}"><div class="dt-content"><div class="dt-blocks"></div><div class="dt-note" hidden></div></div></div>`;
+      const root = box.querySelector('.dt');
+      S.el = {
+        root, tag: null, orig: null, title: null, meta: null, actions: null,
+        strip: null, tabs: null, liveNote: null, sum: null, children: null,
+        blocks: root.querySelector('.dt-blocks'), imgrid: null,
+        note: root.querySelector('.dt-note'), skel: null,
+      };
+      S.tab = 'all';
+      return;
+    }
     box.innerHTML = `
       <div class="dt" data-tab="all">
         <div class="dt-sticky">
@@ -388,7 +435,7 @@
   }
 
   function renderHead(s, now) {
-    if (!S.el) return;
+    if (!S.el || !S.el.meta) return;
     const ti = window.Workbench?.titleOf ? window.Workbench.titleOf(s) : { tag: '', title: s.title || '' };
     const tag = ti.tag || '';
     S.el.tag.hidden = !tag;
@@ -430,7 +477,7 @@
   }
 
   function renderChildren(s) {
-    if (!S.el) return;
+    if (!S.el || !S.el.children) return;
     const list = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     const kids = list
       .filter((x) => x.key !== s.key && x.parentId && (x.parentId === s.id || (s.sessionId && x.parentId === s.sessionId)))
@@ -537,6 +584,24 @@
       body.innerHTML = `<div class="dt-say md">${renderMd(text)}</div>`;
     }
     el.appendChild(body);
+    // Compact mode (drawer): a tool call is one folded line until opened.
+    if (compact && kind === 'tool') {
+      const fold = document.createElement('details');
+      fold.className = 'dt-blk dt-blk-folded';
+      fold.dataset.kind = kind;
+      fold.dataset.ev = ev;
+      fold.dataset.idx = String(idx);
+      fold.style.setProperty('--ev', `var(${EV[ev] || '--ev-tool'})`);
+      const summary = document.createElement('summary');
+      summary.className = 'dt-blk-head';
+      summary.innerHTML = '<span class="dt-blk-type"></span><span class="dt-blk-name"></span><span class="dt-ct-arg"></span><span class="dt-blk-time ui-num"></span>';
+      summary.querySelector('.dt-blk-type').textContent = typeLabel(m, isChild);
+      summary.querySelector('.dt-blk-name').textContent = toolNameOf(m);
+      summary.querySelector('.dt-ct-arg').textContent = String(m.text || '').split('\n')[0].replace(/\s+/g, ' ').trim();
+      summary.querySelector('.dt-blk-time').textContent = m.at ? hhmmss(m.at) : '';
+      fold.append(summary, body);
+      return fold;
+    }
     return el;
   }
 
@@ -553,31 +618,26 @@
   // ---------- summary card ----------
 
   function renderSummary() {
-    if (!S.el) return;
-    const fi = S.messages.findIndex((m) => m.role === 'final');
-    S.finalIdx = fi;
+    if (!S.el || !S.el.sum) return;
+    const c = summaryCard(S.messages, { lines: 6 });
+    S.finalIdx = c ? c.fi : -1;
     const s = S.session;
     const live = s && LIVE.has(s.status);
-    const show = fi >= 0 && !live;
+    const show = !!c && !live;
     S.el.sum.hidden = !show;
     if (!show) return;
-    const m = S.messages[fi];
-    const all = String(m.text || '').replace(/\r\n?/g, '\n').split('\n');
-    let from = 0;
-    while (from < all.length && !all[from].trim()) from++;
-    const preview = all.slice(from, from + 6).join('\n');
-    const clipped = all.slice(from + 6).some((line) => line.trim());
-    const sig = `${preview.length}|${preview.slice(0, 64)}|${clipped}|${!!m.isError}`;
+    const preview = c.text.split('\n').slice(0, 6).join('\n');
+    const sig = `${preview.length}|${preview.slice(0, 64)}|${c.clipped}|${!!c.m.isError}`;
     if (S.el.sum.dataset.sig === sig) return;
     S.el.sum.dataset.sig = sig;
-    S.el.sum.classList.toggle('is-error', !!m.isError);
-    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${m.isError ? t('finalError') : t('finalAnswer')}</span><button type="button" class="dt-link" data-jump-final>${t('jumpFull')}</button></div><div class="dt-sum-text md${clipped ? ' is-clipped' : ''}">${renderMd(preview)}</div>`;
+    S.el.sum.classList.toggle('is-error', !!c.m.isError);
+    S.el.sum.innerHTML = `<div class="dt-sum-head"><span>${c.m.isError ? t('finalError') : t('finalAnswer')}</span><button type="button" class="dt-link" data-jump-final>${t('jumpFull')}</button></div><div class="dt-sum-text md${c.clipped ? ' is-clipped' : ''}">${renderMd(preview)}</div>`;
   }
 
   // ---------- tabs, counts, images ----------
 
   function updateCounts() {
-    if (!S.el) return;
+    if (!S.el || !S.el.tabs) return;
     const tools = S.messages.filter((m) => m.role === 'tool').length;
     const replies = S.messages.filter((m) => m.role === 'assistant' || m.role === 'final').length;
     const images = S.messages.reduce((n, m) => n + (Array.isArray(m.images) ? m.images.length : 0), 0);
@@ -589,7 +649,7 @@
   }
 
   function rebuildImageGrid() {
-    if (!S.el) return;
+    if (!S.el || !S.el.imgrid) return;
     const key = S.session ? S.session.key : '';
     const items = [];
     for (const m of S.messages) {
@@ -612,6 +672,7 @@
     if (!S.el) return;
     S.tab = tab;
     S.el.root.dataset.tab = tab;
+    if (!S.el.tabs) return;
     for (const b of S.el.tabs.querySelectorAll('[data-tab]')) {
       const on = b.dataset.tab === tab;
       b.classList.toggle('on', on);
@@ -624,7 +685,7 @@
   // ---------- event strip ----------
 
   function buildStrip() {
-    if (!S.el) return;
+    if (!S.el || !S.el.strip) return;
     const inner = S.el.strip;
     const n = S.messages.length;
     const width = inner.clientWidth || 800;
@@ -664,7 +725,7 @@
     renderHead(S.session, Date.now() - (state.skew || 0));
     updateLiveNote();
 
-    const mid = document.getElementById('wbMid');
+    const mid = scrollEl();
     if (!mid) return;
     if (S.firstLoad) {
       S.firstLoad = false;
@@ -732,7 +793,7 @@
     if (kept && k > 0) {
       // The log window slid: drop the blocks that fell off the front, then
       // append. Compensate scroll when the reader is not at the bottom.
-      const mid = document.getElementById('wbMid');
+      const mid = scrollEl();
       const before = mid ? mid.scrollHeight : 0;
       for (let i = 0; i < k; i++) {
         const el = S.blocks[i];
@@ -771,7 +832,7 @@
     if (newSigs.length === oldSigs.length) {
       // Same positions, some messages grew (a tool result landed). Replace only
       // those blocks so the rest of the DOM and the scroll position stay put.
-      const mid = document.getElementById('wbMid');
+      const mid = scrollEl();
       const viewTop = mid ? mid.getBoundingClientRect().top : 0;
       for (let i = 0; i < list.length; i++) {
         if (oldSigs[i] === newSigs[i]) continue;
@@ -797,12 +858,12 @@
   // ---------- scroll, follow and overlays ----------
 
   function midRect() {
-    const mid = document.getElementById('wbMid');
+    const mid = scrollEl();
     return mid ? mid.getBoundingClientRect() : null;
   }
 
   function nearBottom() {
-    const mid = document.getElementById('wbMid');
+    const mid = scrollEl();
     if (!mid) return true;
     return mid.scrollHeight - mid.scrollTop - mid.clientHeight < 80;
   }
@@ -824,19 +885,20 @@
   }
 
   function updateLiveNote() {
-    if (!S.el) return;
+    if (!S.el || !S.el.liveNote) return;
     const live = S.session && LIVE.has(S.session.status);
     S.el.liveNote.textContent = live ? (S.nearBottom ? t('liveFollow') : t('livePaused')) : '';
   }
 
   function ensurePill() {
+    if (bare) return null;
     if (pillEl) return pillEl;
     pillEl = document.createElement('button');
     pillEl.type = 'button';
     pillEl.className = 'dt-new';
     pillEl.hidden = true;
     pillEl.addEventListener('click', () => {
-      const mid = document.getElementById('wbMid');
+      const mid = scrollEl();
       if (mid) {
         try { mid.scrollTo({ top: mid.scrollHeight, behavior: 'smooth' }); } catch { mid.scrollTop = mid.scrollHeight; }
       }
@@ -849,6 +911,7 @@
 
   function positionPill() {
     const b = ensurePill();
+    if (!b) return;
     const r = midRect();
     if (!r) { b.hidden = true; return; }
     b.style.left = `${r.left + r.width / 2}px`;
@@ -857,6 +920,7 @@
 
   function showPill() {
     const b = ensurePill();
+    if (!b) return;
     b.hidden = !S.newCount;
     if (S.newCount) b.textContent = t('newMessages')(S.newCount);
     positionPill();
@@ -998,6 +1062,7 @@
         showNote(list.length ? '' : t('noMessages'));
       }
       window.dispatchEvent(new CustomEvent('wb:convo', { detail: { key: s.key } }));
+      opts.onConvo?.(s.key, S.messages, S.loaded, S.private);
     } catch {
       if (S.key === s.key) showNote(t('noMessages'));
     } finally {
@@ -1087,7 +1152,6 @@
   }
 
   function tickEmpty(now) {
-    const box = document.getElementById('wbDetail');
     if (!box || !box.querySelector('.wb-es')) return;
     const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     const byKey = new Map(sessions.map((s) => [s.key, s]));
@@ -1111,7 +1175,7 @@
 
   // ---------- entry points ----------
 
-  function render(box, s, now) {
+  function render(s, now) {
     if (S.key !== s.key) {
       S.key = s.key;
       S.session = s;
@@ -1133,7 +1197,7 @@
       // skeleton replaced the empty-state DOM; drop its cache marker so a later
       // clear() cannot mistake this detail for the empty state.
       box.dataset.html = '';
-      const mid = document.getElementById('wbMid');
+      const mid = scrollEl();
       if (mid) mid.scrollTop = 0;
       setTab('all');
     }
@@ -1145,7 +1209,7 @@
     positionPill();
   }
 
-  function clear(box) {
+  function clear() {
     S.key = null;
     S.session = null;
     S.messages = [];
@@ -1161,6 +1225,10 @@
     S.el = null;
     hideTip();
     showPill();
+    if (bare) {
+      box.innerHTML = '';
+      return;
+    }
     emptyState(box, Date.now() - (state.skew || 0));
   }
 
@@ -1176,8 +1244,9 @@
     const s = list.find((x) => x.key === S.key) || S.session;
     if (!s) return;
     S.session = s;
-    const d = S.el.meta.querySelector('.dt-dur');
+    const d = S.el.meta && S.el.meta.querySelector('.dt-dur');
     if (d) d.textContent = durText(s, now);
+    if (!S.el.children) return;
     for (const el of S.el.children.querySelectorAll('.dt-child[data-child-key]')) {
       const k = list.find((x) => x.key === el.dataset.childKey);
       const d2 = el.querySelector('.dt-child-dur');
@@ -1188,9 +1257,18 @@
   // ---------- events ----------
 
   function init() {
-    const box = document.getElementById('wbDetail');
     if (!box) return;
     box.addEventListener('click', (e) => {
+      const sumMore = e.target.closest('[data-sum-expand]');
+      if (sumMore) {
+        const card = sumMore.closest('.dr-sum');
+        const text = card?.querySelector('.dr-sum-text');
+        if (text) {
+          const open = text.classList.toggle('is-open');
+          sumMore.textContent = open ? t('drawerShowLess') : t('drawerShowAll');
+        }
+        return;
+      }
       const more = e.target.closest('[data-es-more]');
       if (more) { window.dispatchEvent(new CustomEvent('wb:filter', { detail: { filter: 'working' } })); return; }
       const pick = e.target.closest('[data-es-key]');
@@ -1217,7 +1295,7 @@
       const dot = e.target.closest('.dt-ev');
       if (dot && !dot.contains(e.relatedTarget)) hideTip();
     });
-    document.getElementById('wbMid')?.addEventListener('scroll', onScroll, { passive: true });
+    scrollEl()?.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', () => {
       if (S.messages.length) buildStrip();
       updateVisibleDots();
@@ -1227,15 +1305,37 @@
     setInterval(tick, 1000);
   }
 
-  window.WbDetail = {
+  init();
+  return {
     render,
     clear,
     onLang: () => { if (S.key) S.key = null; S.el = null; },
     jumpToFinal,
     jumpToBlock,
-    convo: () => ({ key: S.key, messages: S.messages, loaded: S.loaded }),
-    md: renderMd,
+    convo: () => ({ key: S.key, messages: S.messages, loaded: S.loaded, private: S.private }),
     debug: () => ({ key: S.key, messages: S.messages.length, blocks: S.blocks.length, tab: S.tab, at: S.at, busy: S.busy, loaded: S.loaded }),
   };
-  init();
+  }
+
+  let mainInst = null;
+  const mainEl = document.getElementById('wbDetail');
+  if (mainEl) mainInst = createInstance(mainEl, {});
+  function render(box, s, now) {
+    if (!mainInst && box) mainInst = createInstance(box, {});
+    mainInst?.render(s, now);
+  }
+  function clear() { mainInst?.clear(); }
+
+  window.WbDetail = {
+    render,
+    clear,
+    create: createInstance,
+    summaryCardHtml,
+    onLang: () => mainInst?.onLang(),
+    jumpToFinal: () => mainInst?.jumpToFinal(),
+    jumpToBlock: (idx) => mainInst?.jumpToBlock(idx),
+    convo: () => (mainInst ? mainInst.convo() : { key: null, messages: [], loaded: false, private: false }),
+    md: renderMd,
+    debug: () => (mainInst ? mainInst.debug() : null),
+  };
 })();
