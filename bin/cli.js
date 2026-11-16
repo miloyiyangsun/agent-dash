@@ -2,6 +2,7 @@
 'use strict';
 
 const http = require('http');
+const os = require('os');
 const { spawn } = require('child_process');
 const { Watcher, CLAUDE_DIR, CODEX_DIR, GEMINI_DIR, CLIENT_DIRS, ompDirs, ANTIGRAVITY_DIR } = require('../src/watcher');
 const { DemoWatcher } = require('../src/demo');
@@ -20,6 +21,7 @@ Usage: node bin/cli.js [options]   (or /myoffice as a skill)
 
 Options:
   -p, --port <n>    Port to serve on (default 4545)
+  --host <addr>     Address to bind (default 127.0.0.1; 0.0.0.0 for LAN access)
   --hours <n>       Show sessions active in the last n hours (default 24)
   --omp-dir <path>  OMP sessions root (or a direct --session-dir directory)
   --no-open         Don't open the browser
@@ -58,13 +60,18 @@ For multiple local instances, WMAD_MAGPIE_SOURCES is a JSON array
 of {url, key} objects, used instead of the single-source variables.`;
 
 function parseArgs(argv) {
-  const o = { port: 4545, hours: 24, open: true, privacy: false, json: false, demo: false, stop: false, scenes: false, scene: null, removeScene: null, update: false };
+  const o = { port: 4545, host: '127.0.0.1', hours: 24, open: true, privacy: false, json: false, demo: false, stop: false, scenes: false, scene: null, removeScene: null, update: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-h' || a === '--help') { console.log(HELP); process.exit(0); }
     else if (a === '-v' || a === '--version') { console.log(pkg.version); process.exit(0); }
     else if (a === '-p' || a === '--port') o.port = Number(argv[++i]);
     else if (a.startsWith('--port=')) o.port = Number(a.slice(7));
+    else if (a === '--host') {
+      if (!argv[i + 1] || argv[i + 1].startsWith('--')) { console.error('--host requires an address'); process.exit(1); }
+      o.host = argv[++i];
+    }
+    else if (a.startsWith('--host=')) o.host = a.slice(7);
     else if (a === '--hours') o.hours = Number(argv[++i]);
     else if (a.startsWith('--hours=')) o.hours = Number(a.slice(8));
     else if (a === '--omp-dir') {
@@ -99,6 +106,14 @@ function openBrowser(url) {
   try {
     spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
   } catch {}
+}
+
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list || []) if (i.family === 'IPv4' && !i.internal) out.push(i.address);
+  }
+  return out;
 }
 
 function alreadyRunning(port) {
@@ -231,17 +246,22 @@ async function main() {
     onShutdown: () => { watcher.stop(); server.close(); process.exit(0); },
   });
 
+  const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(o.host);
   const listen = (port, tries) => {
     server.once('error', (err) => {
       if (err.code === 'EADDRINUSE' && tries > 0) listen(port + 1, tries - 1);
       else { console.error(err.message); process.exit(1); }
     });
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, o.host, () => {
       const url = `http://localhost:${port}`;
       const n = watcher.sessions().length;
       const openUrl = url + query;
       const what = o.demo ? 'demo team' : `${n} session${n === 1 ? '' : 's'} in the last ${o.hours}h`;
       console.log(`whatsmyagentdoing v${updater.localVersion()} → ${url}  (${what}, Ctrl+C to stop)`);
+      if (!loopback) {
+        for (const ip of lanAddresses()) console.log(`  LAN: http://${ip}:${port}`);
+        console.log('  看板没有密码，同一网络里的人都能看到。');
+      }
       if (o.open) openBrowser(openUrl);
     });
   };

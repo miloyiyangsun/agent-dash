@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const { guessFromPrompts } = require('./lang');
 const path = require('path');
 
@@ -178,8 +179,22 @@ function snapshot(watcher, opts) {
   return { now, lang: opts.demo ? null : promptLanguage(raw), sessions, summary: summary(sessions, now) };
 }
 
+// Loopback always passes; when the server is bound beyond loopback, the
+// machine's own IPv4 addresses pass too (so http://192.168.x.x:4600 works).
+// Everything else is still refused, which keeps DNS-rebinding pages out.
+function allowedHosts(bind) {
+  const out = new Set(['localhost', '127.0.0.1', '[::1]']);
+  if (bind && !['127.0.0.1', 'localhost', '::1', '[::1]'].includes(bind)) {
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const i of list || []) if (i.family === 'IPv4' && !i.internal) out.add(i.address);
+    }
+  }
+  return out;
+}
+
 function createServer(watcher, opts, { onShutdown } = {}) {
   const clients = new Set();
+  const hosts = allowedHosts(opts.host);
   let last = '';
 
   const push = (force) => {
@@ -200,7 +215,7 @@ function createServer(watcher, opts, { onShutdown } = {}) {
     // Refuse anything not addressed to loopback (blocks DNS-rebinding pages
     // from reading your prompts through this server).
     const host = String(req.headers.host || '').replace(/:\d+$/, '');
-    if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) {
+    if (!hosts.has(host)) {
       res.writeHead(403).end();
       return;
     }

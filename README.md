@@ -51,14 +51,17 @@ node bin/cli.js --port 4600 --no-open   # 不自动打开浏览器
 node bin/cli.js --port 4600 --hours 12  # 只看最近 12 小时
 node bin/cli.js --demo                  # 用一套假数据体验界面
 node bin/cli.js --private               # 隐藏提示词、回复和标题，只显示状态
+node bin/cli.js --host 0.0.0.0          # 监听所有网卡，局域网可访问
 ```
 
 默认端口是 4545，被占用时会自动顺延到下一个空闲端口。完整参数见 `node bin/cli.js --help`。
 
+加 `--host 0.0.0.0` 后，同一 Wi-Fi 下的 iPad、手机可以直接打开启动时打印的局域网地址（如 `http://192.168.1.23:4600`）。看板**没有密码**，同一网络里的人都能看到全部内容，只在可信网络里这样用；默认仍只监听 `127.0.0.1`。
+
 ## 只读原则
 
 - **只读日志**：只 tail / 读取本机 agent 的会话日志（如 Claude Code 的 `~/.claude/projects`、DeepSeek 子代理的 `~/.claude/deepseek-runs`、Codex、Gemini CLI 等），不写入、不修改、不删除任何会话文件。
-- **只监听本机**：HTTP 服务绑定 `127.0.0.1`，并拒绝非 localhost 的 Host 请求。
+- **默认只监听本机**：HTTP 服务默认绑定 `127.0.0.1`，并拒绝非本机 Host 的请求；只有显式加 `--host 0.0.0.0` 才监听局域网（此时放行本机各网卡 IP 的 Host）。看板没有密码，局域网模式仅限可信网络。
 - **无遥测**：本 fork 已关闭上游的版本检查，不会向 GitHub 或任何外部服务发请求。
 - **不打扰 agent**：不注入 hook、不改配置、不要求 API key；看板挂了也不影响正在运行的会话。
 - **唯一的可选写操作**是 `--install-hook`：在 Claude Code 设置里加一个「等待你确认」的提示 hook，并在 `~/.whatsmyagentdoing/` 写一个标记文件。不运行它就完全不写。
