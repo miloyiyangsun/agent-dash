@@ -150,6 +150,8 @@
   .office-loader { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 13px; z-index: 2; }
   .office.loading .office-loader { display: flex; }
   .office-loader .spin { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--tool); border-radius: 50%; animation: spin .8s linear infinite; }
+  .office-toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 3; max-width: min(92%, 460px); padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+  .office-toast[hidden] { display: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .office-gl, .office-overlay { position: absolute; inset: 0; }
   .office-overlay { touch-action: none; }
@@ -291,7 +293,7 @@
         </div>
       </details>
     </div>
-    <div class="office loading" id="officeStage"><div class="office-loader"><div class="spin"></div><span id="loaderText"></span></div></div>
+    <div class="office loading" id="officeStage"><div class="office-loader"><div class="spin"></div><span id="loaderText"></span></div><div class="office-toast" id="officeToast" role="status" hidden></div></div>
     <div class="legend" id="legend"></div>
     <div class="legend" id="agentLegend" hidden></div>
   </div>
@@ -883,7 +885,7 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 function setQuality(v) {
-  state.quality = v; store.set('quality', v); syncControls(); makeOffice();
+  state.quality = v; store.set('quality', v); syncControls(); renderSceneSel(); makeOffice();
 }
 document.getElementById('qualSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1102,7 +1104,7 @@ function syncControls() {
   });
   document.getElementById('qualitySelect').value = state.quality;
   document.getElementById('qualSeg').style.display = view === 'office' ? '' : 'none';
-  document.getElementById('sceneMenu').hidden = view !== 'office' || state.quality !== 'high';
+  document.getElementById('sceneMenu').hidden = view !== 'office';
   showSub.checked = state.showSub;
   showIdle.checked = state.showIdle;
   soundBox.checked = state.sound;
@@ -1213,14 +1215,15 @@ const officeOpts = {
   compact: PIP,
   onFrame: (renderer) => popout?.drawPreview(renderer),
   label: officeLabel,
-  onHover(s, at, click) {
+  onHover(s, at, click, room) {
+    const target = s || room;
     if (click) {
-      if (s) openOfficeTask(s.key);
+      if (target) openOfficeTask(target.key);
       else hideOfficeTip();
       return;
     }
-    if (!s) return hideOfficeTip();
-    showOfficeTip(s, at);
+    if (!target) return hideOfficeTip();
+    showOfficeTip(target, at);
   },
 };
 let office = null;
@@ -1233,15 +1236,35 @@ function setLoading(on, text) {
   officeEl.classList.toggle('loading', on);
   if (text) document.getElementById('loaderText').textContent = text;
 }
+let officeToastT = 0;
+function showOfficeToast(text) {
+  const el = document.getElementById('officeToast');
+  if (!el) return;
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(officeToastT);
+  officeToastT = setTimeout(() => { el.hidden = true; }, 2800);
+}
 async function makeOffice() {
-  const high = state.quality === 'high';
+  const rooms = state.scene === 'rooms';
+  let high = state.quality === 'high';
+  if (rooms && high) {
+    // Team cubicles are a 2D scene for now; switch quietly and say why.
+    state.quality = 'mid';
+    store.set('quality', 'mid');
+    syncControls();
+    renderSceneSel();
+    high = false;
+    showOfficeToast(tr('rooms2dOnly'));
+  }
   const scene = high && state.scene !== 'office' && state.scenes.some((x) => x.id === state.scene) ? state.scene : 'office';
-  const kind = high ? `high:${scene}` : 'mid';
+  const kind = rooms ? 'mid:rooms' : high ? `high:${scene}` : 'mid';
   if (kind === officeKind) return;
   officeKind = kind;
   setLoading(true, high ? L.loading3d : L.loading2d);
-  let Cls = window.Office;
+  let Cls = rooms ? (window.OfficeRooms || window.Office) : window.Office;
   const opts = { ...officeOpts, showAgent: state.showAgent };
+  if (rooms) opts.rooms = true;
   if (high) {
     try {
       Cls = (await import('/office3d.js')).Office3D;
@@ -1289,16 +1312,19 @@ const DOWNLOAD = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><pa
 function renderSceneSel() {
   const name = (x) => (x.name && (x.name[langCode] || x.name.en)) || x.id;
   const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-  const current = state.scenes.some((x) => x.id === state.scene) ? state.scene : 'office';
+  const high = state.quality === 'high';
+  const current = state.scene === 'rooms' ? 'rooms'
+    : high && state.scenes.some((x) => x.id === state.scene) ? state.scene : 'office';
   const btn = (v, label, title = '') =>
     `<button data-v="${esc(v)}" class="${v === current ? 'on' : ''}" aria-pressed="${v === current}"${title ? ` title="${esc(title)}"` : ''}>${label}</button>`;
   const card = (id, v, label, sub, title) => btn(v,
     `<span class="thumb">${SCENE_THUMBS.has(id) ? `<img src="/assets/scenes/${id}.jpg" alt="" loading="lazy">` : sceneIcon(id)}</span>` +
     `<span class="lbl">${label}</span>${sub ? `<small>${sub}</small>` : ''}${CHECK}`, title);
   sceneSel.innerHTML = card('office', 'office', esc(L.office)) +
-    state.scenes.map((x) => card(x.id, x.id, esc(name(x)), '', x.credits || '')).join('') +
-    state.available.map((x) => card(x.id, `dl:${x.id}`, esc(name(x)), `${DOWNLOAD}${kb(x.size)}`, `${L.dl} ${kb(x.size)}`)).join('');
-  const cur = current === 'office' ? L.office : name(state.scenes.find((x) => x.id === current) || { id: current });
+    card('rooms', 'rooms', esc(tr('sceneRooms'))) +
+    (high ? state.scenes.map((x) => card(x.id, x.id, esc(name(x)), '', x.credits || '')).join('') : '') +
+    (high ? state.available.map((x) => card(x.id, `dl:${x.id}`, esc(name(x)), `${DOWNLOAD}${kb(x.size)}`, `${L.dl} ${kb(x.size)}`)).join('') : '');
+  const cur = current === 'office' ? L.office : current === 'rooms' ? tr('sceneRooms') : name(state.scenes.find((x) => x.id === current) || { id: current });
   document.getElementById('sceneIco').innerHTML = sceneIcon(current);
   document.getElementById('sceneName').textContent = cur;
 }

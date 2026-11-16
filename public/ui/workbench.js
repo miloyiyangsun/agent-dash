@@ -331,8 +331,13 @@
   const agentFilter = new Set();
   let query = '';
   let cursor = null;
+  // Set from the relation graph's “N more done → workbench” link: show one
+  // master group only, with a dismissible chip above the list.
+  let focusGroupKey = null;
+  let focusGroupTitle = '';
 
   let filtersEl = null;
+  let focusEl = null;
   let statusRowEl = null;
   let agentRowEl = null;
   const statusChips = new Map();
@@ -389,8 +394,40 @@
 
   // ---------- grouping ----------
 
-  function byStartDesc(a, b) {
-    return (Number(b.startedAt) || 0) - (Number(a.startedAt) || 0) || String(a.key).localeCompare(String(b.key));
+  // Row order everywhere: needs you → error → running → idle → interrupted →
+  // done. Running rows read newest start first; finished rows newest finish
+  // first. Task ids never participate.
+  const SORT_RANK = { waiting: 0, error: 1, thinking: 2, tool: 2, typing: 2, directing: 2, idle: 3, interrupted: 4, done: 5 };
+  const sortRank = (s) => SORT_RANK[s?.status || 'idle'] ?? 3;
+  function sortTime(s, rank) {
+    if (rank === 2) return Number(s.startedAt) || Number(s.lastEventAt) || 0;
+    if (rank === 5) return Number(s.lastEventAt) || Number(s.startedAt) || 0;
+    return Number(s.lastEventAt) || Number(s.startedAt) || 0;
+  }
+  function compareRows(a, b) {
+    const ra = sortRank(a);
+    const rb = sortRank(b);
+    if (ra !== rb) return ra - rb;
+    const ta = sortTime(a, ra);
+    const tb = sortTime(b, rb);
+    if (ta !== tb) return tb - ta;
+    return String(a.key).localeCompare(String(b.key));
+  }
+  const groupRows = (g) => (g.kind === 'master' ? (g.visibleKids || g.kids) : (g.rows || []));
+  function groupLead(g) {
+    let rank = 6;
+    let time = 0;
+    for (const s of groupRows(g)) {
+      const r = sortRank(s);
+      const t = sortTime(s, r);
+      if (r < rank || (r === rank && t > time)) { rank = r; time = t; }
+    }
+    return { rank, time };
+  }
+  function compareGroups(a, b) {
+    const la = groupLead(a);
+    const lb = groupLead(b);
+    return la.rank - lb.rank || lb.time - la.time || String(a.key).localeCompare(String(b.key));
   }
 
   function buildTree(sessions) {
@@ -431,21 +468,17 @@
     for (const [mk, kids] of kidsByMaster) {
       const master = byKey.get(mk);
       if (!master) continue;
-      kids.sort((a, b) => (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0) || String(a.key).localeCompare(String(b.key)));
+      kids.sort(compareRows);
       groups.push({ key: 'master:' + master.key, kind: 'master', master, kids });
     }
-    groups.sort((a, b) => {
-      const at = a.kids.reduce((m, k) => Math.max(m, Number(k.startedAt) || 0), 0);
-      const bt = b.kids.reduce((m, k) => Math.max(m, Number(k.startedAt) || 0), 0);
-      return bt - at || String(a.master.key).localeCompare(String(b.master.key));
-    });
+    groups.sort(compareGroups);
 
     const orphanRows = orphans.filter((s) => !shownMasterKeys.has(s.key));
     const orphanKeys = new Set(orphanRows.map((s) => s.key));
     const other = sessions
       .filter((s) => !shownChildKeys.has(s.key) && !shownMasterKeys.has(s.key) && !orphanKeys.has(s.key))
-      .sort(byStartDesc);
-    orphanRows.sort(byStartDesc);
+      .sort(compareRows);
+    orphanRows.sort(compareRows);
 
     return { groups, other, orphans: orphanRows };
   }
@@ -640,6 +673,14 @@
     statusRowEl = filtersEl.querySelector('[data-row="status"]');
     agentRowEl = filtersEl.querySelector('[data-row="agent"]');
     left.insertBefore(filtersEl, list);
+    focusEl = document.createElement('div');
+    focusEl.className = 'wb-focus';
+    focusEl.hidden = true;
+    focusEl.innerHTML = '<span class="wb-focus-lab"></span><button type="button" class="wb-focus-x" data-wb-focus-clear></button>';
+    left.insertBefore(focusEl, list);
+    focusEl.addEventListener('click', (e) => {
+      if (e.target.closest('[data-wb-focus-clear]')) clearFocus();
+    });
     for (const f of STATUS_FILTERS) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -724,6 +765,17 @@
     const el = document.createElement('div');
     el.className = 'wb-empty-list';
     return el;
+  }
+
+  function renderFocus() {
+    if (!focusEl) return;
+    focusEl.hidden = !focusGroupKey;
+    if (!focusGroupKey) return;
+    const lab = focusEl.querySelector('.wb-focus-lab');
+    const text = t('wbFocusOnly')(focusGroupTitle || focusGroupKey);
+    if (lab.textContent !== text) lab.textContent = text;
+    const x = focusEl.querySelector('.wb-focus-x');
+    if (x.textContent !== t('wbFocusClear')) x.textContent = t('wbFocusClear');
   }
 
   // ---------- FLIP (200ms, transform/opacity only) ----------
@@ -829,14 +881,15 @@
     const viewGroups = [];
     let visibleRowCount = 0;
     for (const g of tree.groups) {
+      if (focusGroupKey && g.master.key !== focusGroupKey) continue;
       const masterHit = q ? searchHit(g.master, getTitle(g.master), q) : false;
       const kids = g.kids.filter((k) => agentOk(k) && statusOk(k) && (!q || masterHit || searchHit(k, getTitle(k), q)));
       if (!kids.length) continue;
       visibleRowCount += kids.length;
       viewGroups.push({ ...g, visibleKids: kids });
     }
-    const other = tree.other.filter((s) => agentOk(s) && statusOk(s) && searchHit(s, getTitle(s), q));
-    const orphans = tree.orphans.filter((s) => agentOk(s) && statusOk(s) && searchHit(s, getTitle(s), q));
+    const other = focusGroupKey ? [] : tree.other.filter((s) => agentOk(s) && statusOk(s) && searchHit(s, getTitle(s), q)).sort(compareRows);
+    const orphans = focusGroupKey ? [] : tree.orphans.filter((s) => agentOk(s) && statusOk(s) && searchHit(s, getTitle(s), q)).sort(compareRows);
     if (other.length) {
       visibleRowCount += other.length;
       viewGroups.push({ key: 'section:other', kind: 'other', rows: other });
@@ -845,6 +898,14 @@
       visibleRowCount += orphans.length;
       viewGroups.push({ key: 'section:orphan', kind: 'orphan', rows: orphans });
     }
+    // Filters can hide a group's leading rows; order the visible master groups
+    // by the rows that remain. The catch-all sections stay at the bottom, with
+    // their own rows sorted above.
+    viewGroups.sort((a, b) => {
+      const sa = a.kind === 'master' ? 0 : 1;
+      const sb = b.kind === 'master' ? 0 : 1;
+      return sa - sb || (sa === 0 ? compareGroups(a, b) : 0);
+    });
 
     const collapsedByG = new Map();
     for (const g of viewGroups) collapsedByG.set(g.key, isCollapsed(g, now));
@@ -863,6 +924,10 @@
     const now = Date.now() - (state.skew || 0);
     const sessions = Array.isArray(state.data.sessions) ? state.data.sessions : [];
     lastByKey = new Map(sessions.map((s) => [s.key, s]));
+    if (focusGroupKey && !lastByKey.has(focusGroupKey)) {
+      focusGroupKey = null;
+      focusGroupTitle = '';
+    }
 
     if (state.wbSel && !lastByKey.has(state.wbSel)) {
       state.wbSel = null;
@@ -906,6 +971,7 @@
 
     ensureFilters();
     renderFilters(sessions);
+    renderFocus();
 
     const box = document.getElementById('wbList');
     if (box) {
@@ -1102,9 +1168,42 @@
     agentFilter.clear();
     query = '';
     state.wbQuery = '';
+    focusGroupKey = null;
+    focusGroupTitle = '';
     const input = document.getElementById('wbSearch');
     if (input) input.value = '';
     render();
+  }
+
+  function clearFocus() {
+    if (!focusGroupKey) return;
+    focusGroupKey = null;
+    focusGroupTitle = '';
+    render();
+  }
+
+  // Called from the relation graph: jump to the workbench, show just this
+  // master's group, and put its header on screen.
+  function focusGroup(key) {
+    if (!key) { clearFocus(); return; }
+    const s = (state.data.sessions || []).find((x) => x.key === key);
+    if (!s) return;
+    focusGroupKey = key;
+    focusGroupTitle = titleOf(s).title;
+    statusFilter = 'all';
+    state.wbFilter = 'all';
+    agentFilter.clear();
+    query = '';
+    state.wbQuery = '';
+    const input = document.getElementById('wbSearch');
+    if (input) input.value = '';
+    if (typeof goToScreen === 'function') goToScreen('workbench');
+    render();
+    requestAnimationFrame(() => {
+      const entry = groupCache.get('master:' + key);
+      if (!entry) return;
+      try { entry.el.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { /* detached */ }
+    });
   }
 
   function onKeyDown(e) {
@@ -1116,7 +1215,10 @@
         e.preventDefault();
         return;
       }
-      if (!query) return;
+      if (!query) {
+        if (focusGroupKey) { e.preventDefault(); clearFocus(); }
+        return;
+      }
       if (document.querySelector('details.menu[open]')) return;
       const lb = document.getElementById('lightbox');
       if (lb && lb.classList.contains('on')) return;
@@ -1251,6 +1353,7 @@
   window.Workbench = {
     init, render, select, onLang: render, titleOf,
     fmtDur, relTime, secondLine, rowTime, searchHit, buildTree, buildView, isCollapsed, setCollapsed,
+    focusGroup, clearFocus,
     STATUS_FILTERS, FILTER_ALIAS, debugOrder, debugGroups,
   };
   init();

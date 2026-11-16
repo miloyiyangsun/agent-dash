@@ -102,6 +102,21 @@
     const chars = Array.from(String(text || '').replace(/\s+/g, ' ').trim());
     return chars.length > n ? chars.slice(0, n).join('') + '…' : chars.join('');
   };
+  const tr = (k) => {
+    const lang = typeof langCode !== 'undefined' ? langCode : 'en';
+    const dict = typeof L !== 'undefined' ? L : null;
+    return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
+  };
+  const withAlpha = (color, a) => {
+    const s = String(color || '');
+    if (/^rgba?\(/i.test(s)) {
+      const body = s.replace(/^rgba?\(/i, '').replace(/\)$/, '').split(',').slice(0, 3).join(',');
+      return `rgba(${body},${a})`;
+    }
+    const n = parseInt(s.replace('#', ''), 16);
+    if (!Number.isFinite(n)) return color;
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  };
 
   const ACT_EMOJI = {
     coffee: '☕', water: '💧', fridge: '🍎', sink: '🫧', stool: '💬', couch: '💬', beanbag: '🎧',
@@ -655,6 +670,14 @@
     }
 
     goTo(p, target) {
+      // A rebuild can leave a person without a usable position (a scene swap
+      // or a room plan that moved). Re-enter through the door instead of
+      // letting NaN spread into every later path.
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        p.x = this.plan.door.x;
+        p.y = this.plan.door.y;
+        p.path = [];
+      }
       if (p.placeOnArrive) {
         p.x = target.x; p.y = target.y; p.path = []; p.placeOnArrive = false;
         return;
@@ -748,15 +771,17 @@
         if (mx >= h.x0 && mx <= h.x1 && my >= h.y0 && my <= h.y1) { found = h; break; }
       }
       const key = found ? found.key : null;
+      const room = found && found.room ? found.room : null;
+      const person = found && !found.room ? this.people.get(found.key) : null;
       this.canvas.style.cursor = key ? 'pointer' : 'default';
-      if (key !== this.hoverKey || click) {
-        this.hoverKey = key;
-        const p = key && this.people.get(key);
+      const hover = room ? 'room:' + room.key : key;
+      if (hover !== this.hoverKey || click) {
+        this.hoverKey = hover;
         // Anchor the hover card under the person rather than under the mouse.
         const at = found
           ? { x: r.left + (found.x0 + found.x1) / 2, y: r.top + found.y1 }
           : { x: e.clientX, y: e.clientY };
-        this.onHover(p ? p.s : null, at, !!click);
+        this.onHover(person ? person.s : null, at, !!click, room);
       }
     }
 
@@ -1872,7 +1897,437 @@
     }
   }
 
+  // ---------------------------------------------------------------- team rooms
+  // A second scene: one cubicle room per controller with live subagents, a big
+  // desk at the back for the controller, workstations for up to six subagents
+  // and standing spots by the door for the rest. Standalone running sessions
+  // share an open-desks area. Room names sit on the floor by the door.
+  const ROOM_W = 8.4;
+  const ROOM_GAP = 1.2;
+  const ROOM_PAD = 1.4;
+  const ROOM_WALL_H = 1.15;
+  const WS_W = 1.4;
+  const WS_GAP = 0.55;
+  const WS_ROW = 1.7;
+  const WS_MAX = 6;
+  const ROOM_COLORS = ['#7d93c4', '#d98b6a', '#7fb08a', '#c9a24c'];
+
+  class OfficeRooms extends Office {
+    constructor(root, opts = {}) {
+      super(root, opts);
+      this.roomsMode = true;
+      this.roomSig = '';
+      this.roomModel = { rooms: [], singles: [], live: [] };
+    }
+
+    buildPlan() {
+      return this.buildRoomsPlan(this.roomModel || { rooms: [], singles: [], live: [] });
+    }
+
+    roomDepth(nKids) {
+      const rows = Math.min(2, Math.ceil(Math.min(WS_MAX, nKids) / 3));
+      return 3.2 + rows * WS_ROW + 1.1;
+    }
+
+    buildRoomModel(sessions) {
+      const list = Array.isArray(sessions) ? sessions : [];
+      const byRef = new Map();
+      for (const s of list) {
+        if (s.id) byRef.set(String(s.id), s);
+        if (s.sessionId) byRef.set(String(s.sessionId), s);
+      }
+      const byKey = new Map(list.map((s) => [s.key, s]));
+      const kidsOf = new Map();
+      for (const s of list) {
+        if (!s.parentId) continue;
+        if (!(s.agent === 'deepseek' || s.agent === 'dsh')) continue;
+        const p = byRef.get(String(s.parentId));
+        if (!p || p.key === s.key) continue;
+        if (!kidsOf.has(p.key)) kidsOf.set(p.key, []);
+        kidsOf.get(p.key).push(s);
+      }
+      const rooms = [];
+      for (const [mk, kids] of kidsOf) {
+        const master = byKey.get(mk);
+        if (!master) continue;
+        const liveKids = kids.filter((k) => WORKING.has(k.status));
+        if (!liveKids.length) continue;
+        rooms.push({ master, liveKids });
+      }
+      // A child that owns a room is drawn there, not at a desk in its parent's.
+      const ownRoom = new Set(rooms.map((r) => r.master.key));
+      for (const r of rooms) {
+        r.liveKids = r.liveKids
+          .filter((k) => !ownRoom.has(k.key))
+          .sort((a, b) => (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0) || String(a.key).localeCompare(String(b.key)));
+      }
+      const rankOf = (s) => ({ waiting: 0, error: 1, thinking: 2, tool: 2, typing: 2, directing: 2 }[s.status] ?? 3);
+      const roomRank = (r) => (r.liveKids.length ? Math.min(...r.liveKids.map(rankOf)) : rankOf(r.master));
+      const newest = (r) => Math.max(0, ...r.liveKids.map((k) => Number(k.startedAt) || 0));
+      rooms.sort((a, b) => roomRank(a) - roomRank(b) || newest(b) - newest(a) || String(a.master.key).localeCompare(String(b.master.key)));
+      const seated = new Set();
+      for (const r of rooms) {
+        seated.add(r.master.key);
+        for (const k of r.liveKids) seated.add(k.key);
+      }
+      const live = list.filter((s) => WORKING.has(s.status));
+      const singles = live.filter((s) => !seated.has(s.key));
+      const signature = rooms
+        .map((r) => `${r.master.key}:${r.liveKids.map((k) => k.key).join(',')}:${this.labelText(r.master)}`)
+        .join('|') + '#' + singles.map((s) => s.key).join(',');
+      return { rooms, singles, live, signature };
+    }
+
+    buildRoomsPlan(model) {
+      const rooms = model.rooms || [];
+      const singles = model.singles || [];
+      const cols = rooms.length <= 1 ? 1 : rooms.length <= 4 ? 2 : 3;
+      const rows = Math.max(1, Math.ceil(rooms.length / cols));
+      const depths = rooms.map((r) => this.roomDepth(r.liveKids.length));
+      const rowH = [];
+      for (let row = 0; row < rows; row++) {
+        let h = 0;
+        for (let c = 0; c < cols; c++) {
+          const i = row * cols + c;
+          if (i < rooms.length) h = Math.max(h, depths[i]);
+        }
+        rowH.push(h || this.roomDepth(0));
+      }
+      const baseW = ROOM_PAD * 2 + cols * ROOM_W + (cols - 1) * ROOM_GAP;
+      const openCount = Math.max(3, Math.min(8, singles.length));
+      const openCols = baseW >= 18 ? 4 : 3;
+      const openW = openCols * WS_W + (openCols - 1) * 0.6;
+      const loungeW = 4.4;
+      const W = Math.max(baseW, ROOM_PAD * 2 + openW + 1.5 + loungeW);
+      const roomsBottom = ROOM_PAD + rowH.reduce((a, b) => a + b, 0) + (rows - 1) * ROOM_GAP;
+      const commonY = roomsBottom + 1.5;
+      const openRows = Math.ceil(openCount / openCols);
+      const D = commonY + 1.0 + Math.max(openRows * WS_ROW + 1.3, 4.0);
+      const grid = new Grid(W, D);
+      const desks = [];
+      const pois = [];
+      const roomOut = [];
+      const solid = (x, y, w, d, pad) => grid.block(x, y, w, d, pad);
+      const poi = (x, y, act, face, opt = {}) => pois.push({ x, y, act, face, sit: 0, ...opt });
+
+      rooms.forEach((r, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = ROOM_PAD + col * (ROOM_W + ROOM_GAP);
+        const y = ROOM_PAD + rowH.slice(0, row).reduce((a, b) => a + b, 0) + row * ROOM_GAP;
+        const d = depths[i];
+        const color = ROOM_COLORS[i % ROOM_COLORS.length];
+        const cx = x + ROOM_W / 2;
+        const mainDesk = { x: cx - 1.4, y: y + 1.15, side: 'n', main: true, owner: r.master, seat: { x: cx, y: y + 0.7 } };
+        desks.push(mainDesk);
+        solid(mainDesk.x, mainDesk.y, 2.8, 1.1, 0.1);
+        const wsDesks = [];
+        const seats = Math.min(WS_MAX, r.liveKids.length);
+        for (let j = 0; j < seats; j++) {
+          const wc = j % 3;
+          const wr = Math.floor(j / 3);
+          const wx = x + (ROOM_W - (3 * WS_W + 2 * WS_GAP)) / 2 + wc * (WS_W + WS_GAP);
+          const wy = y + 3.2 + wr * WS_ROW;
+          const desk = { x: wx, y: wy, side: 'n', seat: { x: wx + WS_W / 2, y: wy - 0.45 } };
+          wsDesks.push(desk);
+          desks.push(desk);
+          solid(wx, wy, WS_W, 0.8, 0.08);
+        }
+        const standDesks = [];
+        const extras = Math.max(0, r.liveKids.length - WS_MAX);
+        for (let j = 0; j < extras; j++) {
+          const line = Math.floor(j / 5);
+          const k = j % 5;
+          const count = Math.min(5, extras - line * 5);
+          const sx = cx + (k - (count - 1) / 2) * 0.72;
+          const sy = y + d - 0.55 - line * 0.55;
+          const desk = { x: sx, y: sy, side: 'n', pose: 'stand', stand: true, seat: { x: sx, y: sy } };
+          standDesks.push(desk);
+          desks.push(desk);
+        }
+        solid(x, y, ROOM_W, 0.1, 0.05);
+        solid(x, y, 0.1, d, 0.05);
+        roomOut.push({ key: r.master.key, master: r.master, liveKids: r.liveKids, x, y, w: ROOM_W, d, color, mainDesk, wsDesks, standDesks });
+      });
+
+      // 散座区: open desks for standalone running sessions.
+      const openX = ROOM_PAD + 0.2;
+      const openY = commonY + 0.5;
+      const openDesks = [];
+      const openStands = [];
+      for (let j = 0; j < openCount; j++) {
+        const c = j % openCols;
+        const rr = Math.floor(j / openCols);
+        const dx = openX + c * (WS_W + 0.6);
+        const dy = openY + rr * WS_ROW;
+        const desk = { x: dx, y: dy, side: 'n', open: true, seat: { x: dx + WS_W / 2, y: dy - 0.45 } };
+        openDesks.push(desk);
+        desks.push(desk);
+        solid(dx, dy, WS_W, 0.8, 0.08);
+      }
+      const extraSingles = Math.max(0, singles.length - openDesks.length);
+      for (let j = 0; j < extraSingles; j++) {
+        const sx = openX + 0.4 + (j % 6) * 0.72;
+        const sy = openY + openRows * WS_ROW + 0.3;
+        const desk = { x: sx, y: sy, side: 'n', pose: 'stand', stand: true, openStand: true, seat: { x: sx, y: sy } };
+        openStands.push(desk);
+        desks.push(desk);
+      }
+
+      // Lounge for people who are not in a room (off duty, finished children).
+      const lx = W - ROOM_PAD - loungeW;
+      const ly = commonY + 0.6;
+      for (let k = 0; k < 3; k++) poi(lx + 0.7 + k * 0.9, ly + 0.55, 'couch', 'front', { sit: 0.36 });
+      poi(lx + 0.9, ly + 2.0, 'coffee', 'back');
+      poi(lx + 3.9, ly + 1.1, 'plant', 'back');
+      solid(lx, ly + 0.3, 2.8, 0.8);
+      solid(lx + 0.4, ly + 1.5, 1.6, 0.7);
+      solid(lx + 3.7, ly + 0.4, 0.4, 0.4);
+
+      const door = { x: ROOM_PAD + 0.3, y: D - 0.7 };
+      return {
+        W, D, grid, items: [], props: [], pois, desks, windows: [], posters: [], pp: null,
+        door, fixed: true, noNap: true,
+        rooms: roomOut,
+        common: { x: openX, y: openY, w: openW, h: openRows * WS_ROW, openCount, lounge: { x: lx, y: ly, w: loungeW } },
+      };
+    }
+
+    update(sessions) {
+      const model = this.buildRoomModel(sessions);
+      if (model.signature !== this.roomSig) {
+        this.roomSig = model.signature;
+        this.plan = this.buildRoomsPlan(model);
+        this.deskOf.clear();
+        for (const p of this.people.values()) {
+          p.poi = null;
+          p.napDesk = null;
+          p.desk = null;
+          p.until = 0;
+          p.path = [];
+        }
+        if (this.cat.x < 0 || this.cat.y < 0 || this.cat.x > this.plan.W - 1 || this.cat.y > this.plan.D - 1) {
+          this.cat.x = this.plan.door.x;
+          this.cat.y = this.plan.door.y;
+          this.cat.path = [];
+          this.cat.until = 0;
+        }
+      }
+      this.roomModel = model;
+
+      const seatOf = new Map();
+      for (const room of this.plan.rooms) {
+        seatOf.set(room.master.key, room.mainDesk);
+        room.liveKids.forEach((kid, i) => {
+          const desk = i < room.wsDesks.length
+            ? room.wsDesks[i]
+            : room.standDesks[i - room.wsDesks.length];
+          if (desk) seatOf.set(kid.key, desk);
+        });
+      }
+      const openDesks = this.plan.desks.filter((d) => d.open);
+      const openStands = this.plan.desks.filter((d) => d.openStand);
+      model.singles.forEach((s, i) => {
+        const desk = openDesks[i] || openStands[i - openDesks.length];
+        if (desk) seatOf.set(s.key, desk);
+      });
+
+      const shown = new Set();
+      const workers = [...model.live];
+      for (const r of model.rooms) if (!workers.includes(r.master)) workers.push(r.master);
+      for (const s of workers) {
+        const desk = seatOf.get(s.key);
+        if (!desk) continue;
+        let p = this.people.get(s.key);
+        if (!p) { p = this.newPerson(s); this.people.set(s.key, p); }
+        p.s = s;
+        p.leaving = false;
+        this.release(p);
+        if (p.desk !== desk || p.mode !== 'work') {
+          p.desk = desk;
+          this.goTo(p, desk.seat);
+        }
+        p.mode = 'work';
+        shown.add(s.key);
+        const idx = this.plan.desks.indexOf(desk);
+        if (idx >= 0) this.deskOf.set(s.key, idx);
+      }
+
+      // Everyone else (finished children, idle sessions) hangs out in the
+      // lounge or goes home, like the built-in office.
+      const off = sessions
+        .filter((s) => !WORKING.has(s.status) && !shown.has(s.key))
+        .sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0));
+      const wanderers = off.slice(0, MAX_WANDERERS);
+      this.offDuty = off.length - wanderers.length;
+      for (const s of wanderers) {
+        let p = this.people.get(s.key);
+        if (!p) { p = this.newPerson(s); this.people.set(s.key, p); }
+        p.s = s;
+        p.leaving = false;
+        if (p.mode !== 'wander') {
+          p.mode = 'wander';
+          p.desk = null;
+          p.poi = null;
+          p.until = 0;
+        }
+        shown.add(s.key);
+      }
+
+      for (const [k, p] of this.people) {
+        if (!shown.has(k) && !p.leaving) {
+          p.leaving = true;
+          p.mode = 'leave';
+          this.release(p);
+          p.desk = null;
+          this.goTo(p, this.plan.door);
+        }
+      }
+      this.first = false;
+    }
+
+    drawRoom() {
+      const pal = this.pal;
+      const { W, D, rooms, common } = this.plan;
+      const P = (x, y, z) => this.iso(x, y, z);
+      for (let x = 0; x < Math.ceil(W); x++) {
+        for (let y = 0; y < Math.ceil(D); y++) {
+          const x1 = Math.min(W, x + 1);
+          const y1 = Math.min(D, y + 1);
+          this.poly([P(x, y), P(x1, y), P(x1, y1), P(x, y1)], (x + y) % 2 ? pal.wood1 : pal.wood2);
+        }
+      }
+      for (let y = 0.5; y < D; y += 0.5) this.poly([P(0, y), P(W, y), P(W, y + 0.012), P(0, y + 0.012)], pal.woodLine);
+      this.poly([P(0, 0, 0), P(W, 0, 0), P(W, 0, WALL_H), P(0, 0, WALL_H)], pal.wallL);
+      this.poly([P(0, 0, 0), P(0, D, 0), P(0, D, WALL_H), P(0, 0, WALL_H)], pal.wallR);
+      this.poly([P(0, 0, WALL_H), P(W, 0, WALL_H), P(W, -0.15, WALL_H), P(-0.15, -0.15, WALL_H), P(-0.15, D, WALL_H), P(0, D, WALL_H)], pal.wallTop);
+      this.poly([P(0, 0, 0), P(W, 0, 0), P(W, 0, 0.12), P(0, 0, 0.12)], pal.trim);
+      this.poly([P(0, 0, 0), P(0, D, 0), P(0, D, 0.12), P(0, 0, 0.12)], pal.trim);
+
+      for (const r of rooms) {
+        this.poly(
+          [P(r.x, r.y), P(r.x + r.w, r.y), P(r.x + r.w, r.y + r.d), P(r.x, r.y + r.d)],
+          withAlpha(r.color, pal.dark ? 0.24 : 0.18),
+        );
+        this.poly(
+          [P(r.x, r.y), P(r.x + r.w, r.y), P(r.x + r.w, r.y + r.d), P(r.x, r.y + r.d)],
+          null,
+          withAlpha(r.color, pal.dark ? 0.75 : 0.6),
+        );
+        this.poly(
+          [P(r.x + 1.0, r.y + 0.55), P(r.x + r.w - 1.0, r.y + 0.55), P(r.x + r.w - 1.0, r.y + 2.55), P(r.x + 1.0, r.y + 2.55)],
+          withAlpha(this.shade(r.color, pal.dark ? -25 : 30), 0.28),
+        );
+        const top = this.shade(r.color, pal.dark ? 6 : 38);
+        const left = this.shade(r.color, pal.dark ? -14 : 12);
+        const right = this.shade(r.color, pal.dark ? -26 : -6);
+        this.box(r.x, r.y, 0, r.w, 0.1, ROOM_WALL_H, top, left, right);
+        this.box(r.x, r.y, 0, 0.1, r.d, ROOM_WALL_H, top, left, right);
+        this.floorLabel(r.x + r.w / 2, r.y + r.d - 0.35, this.labelText(r.master), r.color);
+      }
+
+      if (common) {
+        const { x, y, w, h } = common;
+        this.poly([P(x - 0.3, y - 0.55), P(x + w + 0.3, y - 0.55), P(x + w + 0.3, y + h + 0.65), P(x - 0.3, y + h + 0.65)], pal.carpet);
+        this.floorLabel(x + 0.9, y - 0.32, tr('officeOpenDesks'), pal.carpet);
+        const lx = common.lounge.x;
+        const ly = common.lounge.y;
+        this.couch(lx, ly + 0.3);
+        this.coffeeTable(lx + 0.4, ly + 1.5);
+        this.plant(lx + 3.9, ly + 0.5);
+        this.floorLamp(lx + 3.1, ly + 2.4);
+      }
+    }
+
+    // Flat text on the floor, used for room names and the open-desks label.
+    floorLabel(x, y, text, color) {
+      const c = this.ctx;
+      const p = this.iso(x, y, 0.01);
+      c.save();
+      c.translate(p.x, p.y);
+      c.transform(TW / 2, TH / 2, -TW / 2, TH / 2, 0, 0);
+      c.scale(0.022, 0.022);
+      c.font = `700 15px ${SANS}`;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const label = clipText(text, 14);
+      const w = c.measureText(label).width;
+      this.roundRect(-w / 2 - 7, -13, w + 14, 26, 7, withAlpha(color, this.pal.dark ? 0.55 : 0.4));
+      c.fillStyle = UI.ink;
+      c.fillText(label, 0, 1);
+      c.restore();
+    }
+
+    desk(dk, p) {
+      if (dk.stand) return;
+      if (!dk.main) { super.desk(dk, p); return; }
+      const pal = this.pal;
+      const { x, y } = dk;
+      for (const [lx, ly] of [[0.1, 0.1], [2.58, 0.1], [0.1, 0.88], [2.58, 0.88]]) {
+        this.box(x + lx, y + ly, 0, 0.12, 0.12, 0.72, pal.deskL, pal.deskL, pal.deskR);
+      }
+      this.box(x, y, 0.72, 2.8, 1.1, 0.09, this.shade(pal.deskTop, 8), pal.deskL, pal.deskR);
+      // Wide monitor, seen from behind, with the controller's status LED.
+      this.box(x + 0.95, y + 0.78, 0.81, 0.9, 0.1, 0.48, this.shade(pal.monitor, 15), this.shade(pal.monitor, 8), this.shade(pal.monitor, 12));
+      this.box(x + 1.3, y + 0.8, 0.81, 0.2, 0.08, 0.14, pal.monitor, pal.monitor, pal.monitor);
+      if (p && p.mode === 'work') {
+        const g = this.iso(x + 1.4, y + 0.86, 1.33);
+        this.ctx.fillStyle = STATUS_COLOR[p.s.status] || '#888';
+        this.ctx.globalAlpha = 0.6 + 0.4 * Math.sin(this.t / 400 + p.phase);
+        this.ctx.beginPath();
+        this.ctx.arc(g.x, g.y, 1.8, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.globalAlpha = 1;
+      }
+      this.box(x + 0.9, y + 0.28, 0.81, 0.7, 0.22, 0.03, '#d8d8d8', '#aaa', '#999');
+      this.box(x + 2.1, y + 0.35, 0.81, 0.14, 0.14, 0.13, '#f2f2f2', '#d0d0d0', '#bbb');
+      this.box(x + 0.2, y + 0.3, 0.81, 0.16, 0.16, 0.1, pal.pot, pal.pot, this.shade(pal.pot, -15));
+      const q = this.iso(x + 0.28, y + 0.38, 0.91);
+      this.ctx.fillStyle = pal.plant;
+      this.ctx.beginPath();
+      this.ctx.ellipse(q.x, q.y - 4, 4, 6, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
+    chair(dk, p) {
+      if (dk.stand) return;
+      super.chair(dk, p);
+    }
+
+    draw() {
+      super.draw();
+      const z = this.cam.zoom;
+      const hits = [];
+      for (const room of this.plan.rooms) {
+        const pts = [
+          this.iso(room.x, room.y, 0), this.iso(room.x + room.w, room.y, 0),
+          this.iso(room.x + room.w, room.y + room.d, 0), this.iso(room.x, room.y + room.d, 0),
+          this.iso(room.x, room.y, ROOM_WALL_H), this.iso(room.x + room.w, room.y, ROOM_WALL_H),
+          this.iso(room.x + room.w, room.y + room.d, ROOM_WALL_H), this.iso(room.x, room.y + room.d, ROOM_WALL_H),
+        ];
+        let x0 = Infinity;
+        let x1 = -Infinity;
+        let y0 = Infinity;
+        let y1 = -Infinity;
+        for (const p of pts) {
+          x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+          y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+        }
+        hits.push({
+          key: 'room:' + room.master.key,
+          room: room.master,
+          x0: x0 * z + this.cam.ox,
+          x1: x1 * z + this.cam.ox,
+          y0: y0 * z + this.cam.oy,
+          y1: y1 * z + this.cam.oy,
+        });
+      }
+      if (hits.length) this.hit = [...hits, ...this.hit];
+    }
+  }
+
   window.Office = Office;
+  window.OfficeRooms = OfficeRooms;
   window.OFFICE_AGENT_BADGES = AGENT_BADGES;
   window.OfficeGrid = Grid;
 })();

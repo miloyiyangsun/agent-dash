@@ -16,19 +16,19 @@
   };
   const ACTIVE = new Set(['thinking', 'tool', 'typing', 'directing']);
   const DONE = new Set(['done', 'interrupted', 'idle']);
+  // What stays on the graph: work that is still moving, plus the ancestor
+  // chain that anchors it. Finished branches live in the workbench.
+  const LIVE_NODE = new Set(['thinking', 'tool', 'typing', 'waiting', 'error', 'directing']);
   const nowMs = () => Date.now() - (typeof state !== 'undefined' ? (state.skew || 0) : 0);
 
   const NODE_W = 240;
   const NODE_H = 54;
-  const SUMMARY_W = 160;
-  const SUMMARY_H = 34;
   const COL_GAP = 72;
   const ROW_GAP = 12;
   const GROUP_GAP = 24;
   const GRID_GAP = 12;
   const PAD = 32;
   const SMALL_MAX = 8;      // above this a group switches to the 2–3 column grid
-  const DONE_SHOWN = 6;     // completed children shown before the rest fold
 
   const SANS = '600 12.5px "Microsoft YaHei UI","PingFang SC",system-ui,sans-serif';
   const MONO = '11px "Cascadia Mono","JetBrains Mono",ui-monospace,Consolas,monospace';
@@ -81,7 +81,10 @@
           <button type="button" class="ui-btn" data-topo="fit" id="topoFit"></button>
           <button type="button" class="ui-btn" data-topo="reset" id="topoReset"></button>
         </div>
-        <div class="topo-empty" id="topoEmpty" hidden></div>
+        <div class="topo-empty" id="topoEmpty" hidden>
+          <p class="topo-empty-t"></p>
+          <button type="button" class="ui-btn" id="topoEmptyGo"></button>
+        </div>
       </div>
       <p class="topo-caption" id="topoCaption"></p>
     </div>`;
@@ -94,6 +97,7 @@
   const nodesG = document.getElementById('topoNodes');
   const extraG = document.getElementById('topoExtra');
   const emptyEl = document.getElementById('topoEmpty');
+  const emptyGo = document.getElementById('topoEmptyGo');
   const fitBtn = document.getElementById('topoFit');
   const resetBtn = document.getElementById('topoReset');
   const captionEl = document.getElementById('topoCaption');
@@ -108,33 +112,40 @@
   let k = 1;
   let tx = 0;
   let ty = 0;
-  const expandedMasters = new Set();
+  let hiddenDoneByKey = new Map();
   const drag = { active: false, moved: false, x: 0, y: 0, tx: 0, ty: 0 };
   let suppressClick = false;
 
   function sessionsForGraph() {
     const all = Array.isArray(state?.data?.sessions) ? state.data.sessions : [];
     // The graph exists to show delegation, so subagents stay in even when the
-    // office's "show subagents" switch is off. The agent chips and the idle
-    // switch still apply, like everywhere else.
+    // office's "show subagents" switch is off. The agent chips still apply.
     const agentOk = typeof matchAgent === 'function' ? matchAgent : () => true;
     const base = all.filter((s) => agentOk(s));
-    const shown = base.filter((s) => state.showIdle || s.status !== 'idle');
-    if (state.showIdle) return shown;
-    // A resting controller still anchors a child that is visible (waiting on
-    // you, for example); keep it so the delegation edge survives.
-    const keep = new Set(shown.map((s) => s.key));
     const byRef = new Map();
     for (const s of base) {
       if (s.id) byRef.set(String(s.id), s);
       if (s.sessionId) byRef.set(String(s.sessionId), s);
     }
-    for (const s of shown) {
+    const keep = new Set();
+    for (const s of base) {
+      if (!LIVE_NODE.has(s.status || 'idle')) continue;
+      keep.add(s.key);
       let p = s.parentId ? byRef.get(String(s.parentId)) : null;
-      for (let guard = 0; p && guard < 32; guard++) {
+      for (let guard = 0; p && guard < 64; guard++) {
+        if (p.key === s.key) break;
         keep.add(p.key);
         p = p.parentId ? byRef.get(String(p.parentId)) : null;
       }
+    }
+    // Completed children that are no longer drawn, counted per controller for
+    // the “N more done → workbench” corner link.
+    hiddenDoneByKey = new Map();
+    for (const s of base) {
+      const p = s.parentId ? byRef.get(String(s.parentId)) : null;
+      if (!p || p.key === s.key || keep.has(s.key)) continue;
+      if (!DONE.has(s.status || 'idle')) continue;
+      hiddenDoneByKey.set(p.key, (hiddenDoneByKey.get(p.key) || 0) + 1);
     }
     return base.filter((s) => keep.has(s.key));
   }
@@ -216,23 +227,15 @@
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-  const itemKey = (item) => (item.summary ? `summary:${item.masterKey}` : item.key);
-  const itemHeight = (item) => (item.summary ? SUMMARY_H : NODE_H);
+  const itemKey = (item) => item.key;
 
   function nodePos(item, x, y, h) {
-    if (item.summary) {
-      return {
-        s: null, key: itemKey(item), summary: true, count: item.count, expanded: !!item.expanded,
-        masterKey: item.masterKey, x: x + (NODE_W - SUMMARY_W) / 2, y: y + (h - SUMMARY_H) / 2,
-      };
-    }
     return { s: item, key: item.key, x, y: y + (h - NODE_H) / 2 };
   }
 
   function treeHeight(item, kids, cache, itemsOverride) {
     const key = itemKey(item);
     if (cache.has(key)) return cache.get(key);
-    if (item.summary) { cache.set(key, SUMMARY_H); return SUMMARY_H; }
     const ks = itemsOverride || kids.get(item.key) || [];
     let h = NODE_H;
     if (ks.length) {
@@ -250,9 +253,8 @@
   function edgeFor(from, to, item, d) {
     return {
       from, to, d,
-      status: item.summary ? 'done' : (item.status || 'idle'),
-      summary: !!item.summary,
-      internal: !item.summary && !!item.internal,
+      status: item.status || 'idle',
+      internal: !!item.internal,
     };
   }
 
@@ -260,7 +262,7 @@
     const x1 = from.x + NODE_W;
     const y1 = from.y + NODE_H / 2;
     const x2 = to.x;
-    const y2 = to.y + (to.summary ? SUMMARY_H : NODE_H) / 2;
+    const y2 = to.y + NODE_H / 2;
     const mx = (x1 + x2) / 2;
     return `M${x1.toFixed(1)} ${y1.toFixed(1)} C${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
   }
@@ -296,7 +298,7 @@
     const x1 = from.x + NODE_W;
     const y1 = from.y + NODE_H / 2;
     const x2 = to.x;
-    const y2 = to.y + (to.summary ? SUMMARY_H : NODE_H) / 2;
+    const y2 = to.y + NODE_H / 2;
     const points = [[x1, y1]];
     for (const c of columns) {
       const nodes = colNodes[c];
@@ -310,33 +312,20 @@
     return splinePath(points);
   }
 
-  // ---------- folding ----------
+  // ---------- ordering ----------
 
-  // Live and waiting/error children lead; completed ones follow by recency.
-  // Every group shows all live/waiting/error children plus the six most recent
-  // completed ones; the rest fold into a “+N done” node that toggles open and
-  // closed.
-  function rankOf(s) {
-    const st = s.status || 'idle';
-    if (ACTIVE.has(st)) return 0;
-    if (st === 'waiting') return 1;
-    if (st === 'error') return 2;
-    return 3;
-  }
+  // Same reading order as the workbench: needs you → error → running → idle.
+  // Only these four can appear on the graph.
+  const RANK = { waiting: 0, error: 1, thinking: 2, tool: 2, typing: 2, directing: 2, idle: 3, interrupted: 4, done: 5 };
+  const rankOf = (s) => RANK[s.status || 'idle'] ?? 3;
   const byStartDesc = (a, b) =>
     (Number(b.startedAt) || 0) - (Number(a.startedAt) || 0) || String(a.key).localeCompare(String(b.key));
+  const byRank = (a, b) =>
+    rankOf(a) - rankOf(b) ||
+    (rankOf(a) === 2 ? byStartDesc(a, b) : (Number(b.lastEventAt) || 0) - (Number(a.lastEventAt) || 0) || byStartDesc(a, b));
 
-  function foldedKids(parentKey, kids) {
-    const sorted = [...kids].sort((a, b) => rankOf(a) - rankOf(b) || byStartDesc(a, b));
-    const done = sorted.filter((s) => rankOf(s) === 3);
-    if (done.length <= DONE_SHOWN) return sorted;
-    const expanded = expandedMasters.has(parentKey);
-    const shown = expanded ? done : done.slice(0, DONE_SHOWN);
-    return [
-      ...sorted.filter((s) => rankOf(s) !== 3),
-      ...shown,
-      { summary: true, masterKey: parentKey, count: expanded ? done.length : done.length - DONE_SHOWN, expanded },
-    ];
+  function graphKids(kids) {
+    return [...kids].sort(byRank);
   }
 
   // ---------- placement ----------
@@ -351,7 +340,7 @@
       pos.set(itemKey(kid), p);
       edges.push(edgeFor(parentPos, p, kid, edgeFn ? edgeFn(parentPos, p, kid) : null));
       const gks = kids.get(kid.key) || [];
-      if (!kid.summary && gks.length) {
+      if (gks.length) {
         let total = 0;
         for (const g of gks) total += treeHeight(g, kids, cache) + ROW_GAP;
         total -= ROW_GAP;
@@ -399,7 +388,7 @@
       const rowY = y + row * (NODE_H + GRID_GAP);
       const p = nodePos(item, x, rowY, NODE_H);
       pos.set(itemKey(item), p);
-      colNodes[col].push({ x, y: p.y, h: itemHeight(item) });
+      colNodes[col].push({ x, y: p.y, h: NODE_H });
       placed.push({ item, p, col });
     });
     for (const { item, p, col } of placed) {
@@ -413,7 +402,6 @@
     let tailBottom = y + gridH;
     const tcache = new Map();
     for (const { item, p, col } of placed) {
-      if (item.summary) continue;
       const ks = f.kids.get(item.key) || [];
       if (!ks.length) continue;
       let total = 0;
@@ -437,11 +425,11 @@
     let y = PAD;
     let maxRight = PAD + NODE_W;
     const addRight = (p) => {
-      maxRight = Math.max(maxRight, p.x + (p.summary ? SUMMARY_W : NODE_W));
+      maxRight = Math.max(maxRight, p.x + NODE_W);
     };
     for (const rootS of f.groups) {
       const kids = f.kids.get(rootS.key) || [];
-      const items = foldedKids(rootS.key, kids);
+      const items = graphKids(kids);
       if (kids.length > SMALL_MAX) {
         const g = placeGrid(rootS, items, f, availW, y, pos, edges);
         maxRight = Math.max(maxRight, g.right);
@@ -514,6 +502,7 @@
     if (selKey === s.key || selected) cls.push('is-sel');
     if (hoverKey === s.key) cls.push('is-hi');
     const tip = [ti.tag, ti.title].filter(Boolean).join(' · ') || s.project || s.agent || '';
+    const hiddenDone = hiddenDoneByKey.get(s.key) || 0;
     return `<g class="${cls.join(' ')}" data-key="${esc(s.key)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})" style="--s:var(--st-${stToken(st)})">
       <title>${esc(tip)}</title>
       <rect class="topo-node-bg" width="${NODE_W}" height="${NODE_H}" rx="6"/>
@@ -522,6 +511,7 @@
       <text class="topo-title" x="${titleX.toFixed(1)}" y="23">${esc(title)}</text>
       ${internal ? `<rect class="topo-internal-bg" x="${(NODE_W - badgeW - 8).toFixed(1)}" y="9" width="${badgeW}" height="18" rx="9"/><text class="topo-internal-t" x="${(NODE_W - badgeW / 2 - 8).toFixed(1)}" y="22" text-anchor="middle">${esc(t('topoInternal'))}</text>` : ''}
       <text class="topo-sub" x="10" y="42"><tspan class="topo-st">${esc(word)}</tspan>${actText ? `<tspan class="topo-act"> · ${esc(actText)}</tspan>` : ''}</text>
+      ${hiddenDone ? `<text class="topo-more" data-more="${esc(s.key)}" x="${NODE_W - 2}" y="-6" text-anchor="end">${esc(t('topoHiddenDone')(hiddenDone))}</text>` : ''}
     </g>`;
   }
 
@@ -531,20 +521,10 @@
     const cls = ['topo-edge', `is-${kind}`];
     if (kind === 'live') cls.push('is-flow');
     if (e.internal) cls.push('is-internal');
-    if (e.summary) cls.push('is-summary');
     const fromKey = e.from.s ? e.from.s.key : e.from.key;
     const toKey = e.to.s ? e.to.s.key : e.to.key;
     if (hoverKey && (fromKey === hoverKey || toKey === hoverKey)) cls.push('is-hi');
     return `<path class="${cls.join(' ')}" data-from="${esc(fromKey)}" data-to="${esc(toKey)}" style="--edge:var(--st-${stToken(st)})" d="${e.d || curvePath(e.from, e.to)}"/>`;
-  }
-
-  function summaryMarkup(p) {
-    const label = p.expanded ? t('topoCollapseDone')(p.count) : t('topoMoreDone')(p.count);
-    return `<g class="topo-node topo-summary${p.expanded ? ' is-open' : ''}" data-summary="${esc(p.masterKey)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})">
-      <title>${esc(label)}</title>
-      <rect class="topo-node-bg" width="${SUMMARY_W}" height="${SUMMARY_H}" rx="6"/>
-      <text class="topo-sum-title" x="${(SUMMARY_W / 2).toFixed(1)}" y="21" text-anchor="middle">${esc(label)}</text>
-    </g>`;
   }
 
   function draw() {
@@ -570,7 +550,7 @@
       viewEl.classList.remove('is-hovering');
     }
     edgesG.innerHTML = lay.edges.map(edgeMarkup).join('');
-    nodesG.innerHTML = [...lay.pos.values()].map((p) => (p.summary ? summaryMarkup(p) : nodeMarkup(p))).join('');
+    nodesG.innerHTML = [...lay.pos.values()].map((p) => nodeMarkup(p)).join('');
     extraG.innerHTML = lay.indepLabel
       ? `<text class="topo-sec-label" x="${PAD}" y="${lay.indepLabel.y + 16}">${esc(t('topoIndependent'))} · ${lay.indepCount}</text>`
       : '';
@@ -674,7 +654,8 @@
     fitBtn.textContent = t('topoFit');
     resetBtn.textContent = t('topoReset');
     captionEl.textContent = t('topoCaption');
-    emptyEl.textContent = t('topoEmpty');
+    emptyEl.querySelector('.topo-empty-t').textContent = t('topoNoLive');
+    emptyGo.textContent = t('topoGoWorkbench');
     fitBtn.title = t('topoFit');
     resetBtn.title = t('topoReset');
   }
@@ -732,17 +713,21 @@
 
   stage.addEventListener('click', (e) => {
     if (suppressClick) return;
-    const sum = e.target.closest?.('.topo-summary');
-    if (sum) {
-      const key = sum.dataset.summary;
-      if (expandedMasters.has(key)) expandedMasters.delete(key);
-      else expandedMasters.add(key);
-      schedule();
+    const more = e.target.closest?.('.topo-more');
+    if (more) {
+      // The corner link leads to the workbench, filtered to this controller's
+      // group; it must not also open the node's drawer.
+      window.Workbench?.focusGroup?.(more.dataset.more);
       return;
     }
     const g = e.target.closest?.('.topo-node');
     if (!g) return;
     window.AgentDrawer?.openTask?.(g.dataset.key);
+  });
+
+  emptyGo.addEventListener('click', () => {
+    window.Workbench?.clearFocus?.();
+    if (typeof goToScreen === 'function') goToScreen('workbench');
   });
 
   stage.addEventListener('wheel', (e) => {
@@ -771,6 +756,11 @@
     onLang: () => { applyLabels(); schedule(); },
     fit: () => fit(true),
     reset,
-    debug: () => ({ active, hoverKey, selKey, world, k, tx, ty, autoFit }),
+    debug: () => ({
+      active, hoverKey, selKey, world, k, tx, ty, autoFit,
+      nodes: nodesG.children.length,
+      keys: [...nodesG.children].map((g) => g.dataset.key),
+      hiddenDone: [...hiddenDoneByKey],
+    }),
   };
 })();
