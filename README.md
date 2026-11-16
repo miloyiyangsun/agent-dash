@@ -1,240 +1,71 @@
-<img src="assets/logo.svg" width="64" height="64" alt="">
+# Agent 观测台（agent-dash）
 
-# whatsmyagentdoing
+> 本项目基于开源项目 **[whatsmyagentdoing v0.8.1](https://github.com/Charonyuu/whatsmyagentdoing)**（作者 cheoyu，MIT 许可）魔改，保留原项目的 MIT 许可证与版权声明。感谢原作者。
 
-**A Claude Code / Codex skill: type `/myoffice` and see what every Claude Code, Codex, Gemini CLI, Antigravity CLI, Copilot CLI, OMP (oh-my-pi), Pi, Kimi Code, DeepSeek Harness, Grok Build, OpenCode and Hermes agent on your machine is doing — live, in a little office.**
+一个跑在本机的 AI Agent 只读观测台：把 Claude Code、Codex、Gemini CLI、DeepSeek 子代理等本机 agent 的会话日志，变成可以一眼看懂的实时看板。零运行时依赖，克隆下来就能跑，不需要 `npm install`，不需要配置 API key。
 
-**Website:** https://charonyuu.github.io/whatsmyagentdoing/
+## 四个视图
 
-OMP support: [paths, profiles, Resume and limitations](docs/omp.md).
-
-![The 3D office: agents at their desks, off-duty ones wandering around](docs/office-3d.gif)
-
-| Medium (2D) | List |
+| 视图 | 看什么 |
 |---|---|
-| ![2D office](docs/office-2d.gif) | ![List view](docs/list.gif) |
+| **办公室** | 3D 等距办公室。正在工作的 agent 坐在工位上：思考时冒想法气泡，跑工具时屏幕滚动代码，需要你时站起来招手；最近完成的 agent 会下班闲逛（茶水间、沙发、书架、白板、街机、乒乓球……）。支持 2D / 3D 切换，可拖拽旋转、滚轮缩放。 |
+| **关系图** | 主控 agent 在左，派出的子代理向右逐列展开，孙代理继续向右；连线表示委派关系，运行中的链路有流动效果。一眼看清「谁在替谁干活」。 |
+| **工作台** | 三栏布局：左栏任务树（按需你 / 进行中 / 已完成分组），中栏是任务详情——事件条、对话记录、工具调用、最终答复，右栏是属性、改动文件和图片。 |
+| **时间轴** | 每个任务一条泳道，按与工作台相同的分组和筛选排列；右侧是固定宽度的时间窗，滚轮/拖拽只缩放或平移时间范围，不横向滚动。 |
 
-<sub>Recorded with `--demo` (a made-up team), so no real sessions are shown.</sub>
+右上角的搜索框（`Ctrl K`）和状态筛选在三个列表视图之间共用；界面支持简体中文、繁體中文、English、日本語、한국어、Español、Français、Deutsch、Português。
 
-## Install
+## 启动
 
-**Easiest: ask your agent.** Paste this into Claude Code or Codex:
-
-> Install the myoffice skill from https://github.com/Charonyuu/whatsmyagentdoing: clone it with `git clone --depth 1` into `~/.claude/skills/myoffice` (for Codex: `~/.codex/skills/myoffice`), check that `node --version` is 18 or newer, then tell me to start a new session and type /myoffice.
-
-Or do it yourself:
+要求 Node.js 18+（OpenCode / Hermes 的 SQLite 读取需要 22.13+，低版本会自动跳过这两个 agent，其余功能不受影响）。
 
 ```bash
-# Claude Code
-git clone --depth 1 https://github.com/Charonyuu/whatsmyagentdoing ~/.claude/skills/myoffice
-
-# Codex
-git clone --depth 1 https://github.com/Charonyuu/whatsmyagentdoing ~/.codex/skills/myoffice
+node bin/cli.js --port 4600
 ```
 
-Then type **`/myoffice`** (or just ask *"what are my agents doing?"*). The office opens in your browser. Update later with `git -C ~/.claude/skills/myoffice pull`.
+然后打开 <http://127.0.0.1:4600>。
 
-Needs Node.js 18+. Nothing to `npm install` — the repo runs as cloned. Prefer no skill? `node bin/cli.js` from a clone works too.
+常用参数：
 
-It opens an isometric **office**. Agents that are working sit at cubicle desks: a thought bubble while thinking, typing with code scrolling on the monitor while a tool runs, standing up and waving when they need you. A handful of recently finished agents stay around off duty and wander: coffee and water in the pantry, the couch and beanbags, the bookshelf, the meeting-room whiteboard, the arcade cabinet, ping-pong and foosball (when two of them are free), the phone booth, or a nap at an empty desk. Everyone else has gone home. The windows follow your local time of day (and in Medium there's an office cat). Hover anyone to see what they're on.
-
-Two looks: **Medium** is a hand-drawn 2D canvas (zero dependencies). **High (3D)** renders the same office with real-time lighting and shadows using [Kenney](https://kenney.nl)'s CC0 *Mini Characters* (with their walk / sit / interact animations) and *Furniture Kit*; drag to rotate, scroll to zoom. The 3D bundle (three.js, ~180 KB gzipped) and models (~1.3 MB, meshopt-compressed) only load when you pick High.
-
-**Scenes (3D):** the office is built in; other scenes are small downloadable packs (Christmas Cabin, Neon Arcade, Haunted Hollow, Pirate Cove, Café, Space Station and Castle are about 100–290 KB each), fetched only when you pick one from the scene menu next to 2D/3D, run `--scene pirate`, or ask your agent for it. Packs are data only (a manifest plus Kenney CC0 models) and are checked against a pinned SHA-256 before they're installed into `~/.whatsmyagentdoing/scenes`.
-
-Each session updates in real time:
-
-| Status | Meaning |
-|---|---|
-| 💭 Thinking | reasoning, or reading a tool result |
-| ⏳ Running | a tool call is in flight — shows which (`Bash: npm test`, `Edit app.ts`, `github · create_pr`) |
-| ✍️ Writing reply | started its answer, turn not finished yet |
-| 🟠 Waiting for you | asked you a question / needs approval |
-| ✅ Done | turn finished, with the last reply |
-| ■ Interrupted / ❗ Error / – Idle | |
-
-The UI speaks English, 繁體中文, 简体中文, 日本語, 한국어, Español, Français, Deutsch and Português. By default it uses the language you write your prompts in (falling back to your browser's); pick one from the language menu in the toolbar to override.
-
-In the agent panel, sessions are grouped into **Needs you → Working → Finished**, with a live timer for the current turn, a copy button for the resume command (`claude --resume …` / `codex resume …` / `copilot --resume …`), optional browser notifications when an agent finishes, and a toolbar filter to show any mix of agents (or all of them), plus subagents and idle sessions. The tab title shows how many agents are working.
-
-**Alerts:** when an agent needs you (a question, an approval or an error), the page can send a browser notification and, with **Settings → Sound**, play a short chime. A tool that runs for more than 10 minutes, or thinking that goes silent for 8, is flagged as *No progress*, so a hung command or a lost prompt doesn't cost you an hour.
-
-**Today:** the Today panel adds up today's turns and tokens by agent and by project, from Claude Code and Codex usage records since local midnight. Each card also shows how full the model's context window is (amber from 60%, red from 85%). Very large logs are read head + tail, so their counts can be low.
-
-**Layout:** the office fills the window, with the agents listed in a side panel grouped by Needs you → Working → Finished. Click an agent there, or a person in the office, to open its status, model, folder, usage, resume command and recent conversation — your messages, its replies and the tools it ran, read from the end of its own log (full text for Claude Code and Codex). The panel slides away with its arrow and comes back from the tab at the top right; on phones it starts folded away. With `--private` the conversation is never sent to the page.
-
-**Agent badges:** in both 2D and 3D, each provider's logo identifies its agents beside their names, including subagents. The same icons appear in the legend, list cards and filters. Open **Settings → Agent badges** to hide the office markers and legend; your choice is saved. Icons are bundled locally, with initials as a fallback if an image cannot load. See [icon sources and attribution](assets/agents/README.md).
-
-The toolbar keeps the view, 2D/3D and pop-out controls visible. Scene selection, agent filters, display options, notifications and language are grouped under **Settings**.
-
-**Pop out:** browsers with the [Document Picture-in-Picture API](https://developer.chrome.com/docs/web-platform/document-picture-in-picture) can open the office or list in an interactive, always-on-top window. The compact list shows **Needs you** and **Working**. View, quality, scene, filters, language and badge settings stay in sync with the main tab when browser storage is available. Closing the pop-out restores the main view, and only the main tab sends notifications.
-
-When Document PiP isn't available, **Pop out** in office view starts a local, view-only video preview of the 2D or 3D office. Use its video PiP button, or the browser's own video controls/context menu (such as Firefox's), to float it. Stop the preview when finished. No screen-sharing permission is needed and no video is uploaded. Background animation may run at a lower frame rate, depending on browser throttling; this fallback doesn't support list cards or clicking agents.
-
-Works with Claude Code (CLI, desktop, IDE), Codex (CLI, desktop, IDE), Gemini CLI, Antigravity CLI,
-Copilot CLI, OMP, Pi, Kimi Code, DeepSeek Harness (DSH), Grok Build, OpenCode and Hermes through their
-local session stores. (The Google Antigravity desktop app keeps its conversations in an undocumented binary
-store and isn't supported yet; its `agy` CLI is.)
-
-## Options
-
-```
--p, --port <n>    Port (default 4545; next free one if taken)
---hours <n>       Sessions active in the last n hours (default 24)
---omp-dir <path>  OMP sessions root, or a directory passed to omp --session-dir
---no-open         Don't open the browser
---private         Hide prompts, replies and titles — status only (screen-share safe)
---json            Print one snapshot as JSON and exit
---demo            Show a made-up team instead of your sessions (screenshots, trying it out)
---stop            Stop a running dashboard (or say /myoffice stop)
---update          git pull the latest version and restart (or say /myoffice update)
---scenes          List 3D scenes, installed and downloadable
---scene <id>      Download a scene if needed and open the office in it
---install-hook    Optional: add a Claude Code hook so permission prompts show "Waiting for you"
---uninstall-hook  Remove that hook again
+```bash
+node bin/cli.js --port 4600 --no-open   # 不自动打开浏览器
+node bin/cli.js --port 4600 --hours 12  # 只看最近 12 小时
+node bin/cli.js --demo                  # 用一套假数据体验界面
+node bin/cli.js --private               # 隐藏提示词、回复和标题，只显示状态
 ```
 
-Running it again while it's up just reopens the tab.
+默认端口是 4545，被占用时会自动顺延到下一个空闲端口。完整参数见 `node bin/cli.js --help`。
 
-**Updates:** the page shows its version in the corner and an **Update** button when a newer one is out (it checks the `package.json` on this repo's main branch about every half hour; set `WMAD_NO_UPDATE_CHECK=1` to turn that off). The button — or `--update`, or `/myoffice update` — runs `git pull` in the install folder and restarts the dashboard.
+## 只读原则
 
-## How it works
+- **只读日志**：只 tail / 读取本机 agent 的会话日志（如 Claude Code 的 `~/.claude/projects`、DeepSeek 子代理的 `~/.claude/deepseek-runs`、Codex、Gemini CLI 等），不写入、不修改、不删除任何会话文件。
+- **只监听本机**：HTTP 服务绑定 `127.0.0.1`，并拒绝非 localhost 的 Host 请求。
+- **无遥测**：本 fork 已关闭上游的版本检查，不会向 GitHub 或任何外部服务发请求。
+- **不打扰 agent**：不注入 hook、不改配置、不要求 API key；看板挂了也不影响正在运行的会话。
+- **唯一的可选写操作**是 `--install-hook`：在 Claude Code 设置里加一个「等待你确认」的提示 hook，并在 `~/.whatsmyagentdoing/` 写一个标记文件。不运行它就完全不写。
+- **`--private`** 下，提示词、回复和标题不会发送到浏览器页面。
 
-No hooks, no config, no API keys. Both tools already append every message and tool call to JSONL files as they work:
+## DeepSeek 子代理适配
 
-- Claude Code: `~/.claude/projects/<project>/<session>.jsonl` (+ `subagents/`)
-- Codex: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Date folders record when a chat started; discovery checks all dates and uses log modification times to find recently active chats, including months-old conversations. Inactive log contents are not read.
-- Gemini CLI: `~/.gemini/tmp/<project>/chats/session-*.jsonl` (project paths from `~/.gemini/projects.json`)
-- Antigravity CLI: `~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/logs/transcript.jsonl`, with folders from `history.jsonl` and titles from `annotations/`. Override with `ANTIGRAVITY_HOME`. Subagents appear under their parent; Resume uses `agy --conversation`.
-- Copilot CLI: `~/.copilot/session-state/<session>/events.jsonl`
-- Kimi Code: `~/.kimi-code/sessions/<project>/<session>/agents/<agent>/wire.jsonl`, with names and folders from `state.json`
-- DSH: `~/.dsh/sessions/<project>/<session>/session[.vN].jsonl[.zstd]`; only the latest format in a session folder is read
-- Grok Build: `~/.grok/sessions/<project>/<session>/updates.jsonl`, with metadata from `summary.json`
-- OMP: `~/.omp/agent/sessions/<project>/*.jsonl`, plus named profiles. Override with `WMAD_OMP_SESSIONS_DIR` or `--omp-dir`. Details: [OMP](docs/omp.md).
-- Pi: `~/.pi/agent/sessions/<project>/*.jsonl`. Override with `PI_CODING_AGENT_SESSION_DIR` or `PI_CODING_AGENT_DIR`; Resume uses `pi --session`.
-- OpenCode: `~/.local/share/opencode/opencode.db`, sessions and messages from its `session` / `message` / `part` tables. Override with `OPENCODE_DB`.
-- Hermes: `%LOCALAPPDATA%\hermes\state.db`, sessions and messages from its `sessions` / `messages` tables. Override with `HERMES_HOME`.
+本 fork 在 `src/deepseek.js` 中增加了 DeepSeek 子代理适配层。
 
-`whatsmyagentdoing` tails those files (read-only), turns the latest event into a status, and pushes it to the page over Server-Sent Events. Set `CLAUDE_CONFIG_DIR` / `CODEX_HOME` / `GEMINI_CLI_HOME` if yours live elsewhere.
+`ask_deepseek.py` 启动的每个 DeepSeek 子会话都是一个真实的 `claude.exe -p` 进程，并在 `~/.claude/deepseek-runs/` 留下两个文件：`run-YYYYmmdd-HHMMSS.jsonl`（完整事件流）和同名 `.meta.json`（提示词、目录、档位等元信息）。适配层把每次运行当作一个普通会话：
 
-Kimi Code, DSH and Grok Build use `KIMI_CODE_HOME`, `DSH_HOME` and `GROK_HOME`
-respectively to override their home directories. Each native session gets its
-own person; Kimi's separate agent wire files and explicitly identified DSH and
-Grok subagent sessions use the existing subagent filter. These clients use
-locally bundled Magpie icons in the existing badge positions, with initials
-as a loading fallback. Resume buttons use `kimi --session`,
-`dsh tui --resume` and `grok --resume`, respectively.
+- 从 JSONL 里还原思考、工具调用、工具参数、工具结果和图片；
+- 与 Claude Code 会话一起出现在办公室、关系图、工作台和时间轴中；
+- 根据 `.meta.json` 里的提示词识别任务标签（如 `T8a`），区分同一个主控派出的并行子代理；
+- 只读这些日志，不做任何写入。
 
-OpenCode and Hermes keep every session in one SQLite database instead of a log
-file per session, so they are read through Node's built-in `node:sqlite` (22.13
-and newer) rather than tailed. A Node without it simply leaves these two agents
-out. Both databases are opened read-only, and Resume buttons use
-`opencode --session` and `hermes --resume`.
+主控与子代理的父子关系来自 Claude Code 的 subagent / 委派记录以及 run 元信息，因此 DeepSeek 子代理会自然出现在关系图的委派链里。
 
-The office legend follows the current sessions and client/subagent filters:
-clients appear when present and disappear when no matching sessions remain.
+## 支持的 agent
 
-Kimi's `turn.ended` / `agent.turn.ended`, DSH's `turn/end` and Grok's
-`turn_completed` drive completed, interrupted and failed states. Individual
-model calls, finished tools and background subtasks never mark the main turn
-Done. Kimi interaction requests and DSH approval requests show Waiting for you.
-Grok's persisted tool Pending state does not prove an approval wait, so it
-remains Running. A reply without a terminal turn event eventually becomes
-Idle, never Done merely from a timeout.
+Claude Code（CLI / 桌面 / IDE）、Codex、Gemini CLI、Antigravity CLI、Copilot CLI、OMP、Pi、Kimi Code、DeepSeek Harness（DSH）、Grok Build、OpenCode、Hermes，以及本 fork 额外接入的 DeepSeek 子代理。各客户端的日志位置与覆盖方式见 `node bin/cli.js --help`；上游的完整说明见 [whatsmyagentdoing](https://github.com/Charonyuu/whatsmyagentdoing)。
 
-Kimi and Grok logs are replayed in full on discovery, in bounded read blocks,
-then tailed incrementally. Skipping the middle would lose pending tools and
-approvals. Incomplete lines and UTF-8 characters wait for the next append.
+## 隐私
 
-DSH's compressed logs use Node's built-in zstd decoder after a one-time
-concatenated-frame check, otherwise the existing `zstd` executable on PATH.
-Nothing is installed automatically. Compressed DSH logs cannot be read without either decoder;
-the dashboard warns and other clients continue. DSH replays changed logs
-whole, at most every 5 seconds, bounded to 32 MB of decoded data. Kimi Code and Grok Build
-logs up to 32 MB are replayed whole on discovery; larger ones are read head + tail. An incomplete compressed write
-preserves the last readable snapshot and is retried. Large unsupported logs
-are reported rather than truncated into a misleading status.
+所有数据都留在本机。页面通过 Server-Sent Events 从本地服务获取状态；`--private` 可隐藏对话正文。日志格式不是公开 API，客户端升级后状态解析可能退化，欢迎提 issue。
 
-### Magpie (optional)
+## 许可
 
-To include sessions observed by a local Magpie gateway, set `WMAD_MAGPIE_URL`
-to its web management origin (for example, `http://127.0.0.1:3430`) and
-`WMAD_MAGPIE_KEY` to its web sign-in key, then start the dashboard normally.
-The key is the `k` value in Magpie's sign-in link (or its configured
-`MAGPIE_WEB_KEY`), not a model-provider API key. Supply it through your local
-environment; do not put it in a command-line argument, saved URL, or repository
-file. Loopback origins and IP addresses assigned to this computer (including
-its Tailscale interface) are accepted; arbitrary remote hosts are not.
-The server uses Magpie's sign-in exchange to obtain the cookie name instead
-of guessing it from the URL port. Docker's published port can therefore differ
-from Magpie's internal port. No container access or Magpie changes are needed.
-
-For multiple local Magpie instances, set `WMAD_MAGPIE_SOURCES` to a JSON array
-of `{"url":"http://127.0.0.1:3430","key":"<web-sign-in-key>"}` objects, one per
-instance with its own URL and key. This replaces the single-source variables.
-Keep this JSON in your local process environment, not in the repository.
-Each instance is polled and authenticated independently; one failed instance
-does not stop the others.
-
-The server polls `GET /api/sessions` and `GET /api/gateway/trace` every five
-seconds per instance. Each `(agent, session ID)` is one person, even when two
-gateways observe it; models, accounts and individual requests never become
-extra people. Magpie's session list already combines its native records and
-gateway records. Across instances, native metadata takes precedence, with the
-newest record breaking ties, while an in-flight request from either healthy
-instance means Thinking. Explicit subagent and parent-session metadata is
-preserved. A session also found in local logs keeps its native status,
-previews and resume command. Magpie only fills missing metadata and parent
-relationships; it never overwrites the local tracker.
-
-For gateway-only sessions, an unfinished foreground model request means
-**Thinking**. Between requests the state is **Idle**, not **Done**: a request
-ending does not prove the agent finished its turn or task. Title, guardian and
-compaction helper requests are ignored. Magpie's current web API does not
-expose tool execution, approval waits or reliable turn-completion events;
-native logs are needed for those states. The transcript API is not polled
-because its conversation blocks do not establish those lifecycle events.
-Gateway-only sessions do not offer a local resume command. Other clients keep
-their own names and get filters in Settings, using the existing office and
-list views. Idle visibility and off-duty limits remain unchanged.
-
-`--hours`, `--private` and `--json` also apply to Magpie. Failed polls print a
-credential-free warning identifying the source, clear that source's observed
-activity and retry; other sources and local logs continue normally. `--json`
-waits for one poll from each source and exits with an error if any fails.
-The web keys and sign-in cookies stay on the server and are never sent to the
-dashboard's browser.
-
-**Privacy:** nothing leaves your machine. The server binds to `127.0.0.1` only and rejects requests that aren't addressed to localhost. No runtime dependencies — read `src/` in five minutes. (`web/office3d.js` is the 3D source; `npm run build` bundles it with three.js into `public/office3d.js`.)
-
-## Limits
-
-- Logs are written per finished block, not per token, so "Writing reply" means a reply block has landed and the turn isn't over — not a live keystroke stream.
-- Claude Code doesn't log permission prompts, so a tool waiting on your approval shows as "Running" until you answer (Codex and Gemini CLI do log it, so those show "Waiting for you"). Run `node bin/cli.js --install-hook` once to add an optional Notification hook to your Claude Code settings: on a permission or question prompt it writes a small marker to `~/.whatsmyagentdoing/waiting`, and the session shows "Waiting for you" until its log moves on. New Claude Code sessions pick it up; `--uninstall-hook` removes it. If you switch Node versions, run `--install-hook` again.
-- Gemini CLI writes its thoughts together with the reply, so between your prompt and its first tool call or reply it simply shows "Thinking".
-- OpenCode and Hermes keep their sessions in SQLite, which is read through Node's built-in `node:sqlite` (Node.js 22.13 and newer). On an older Node those two agents are skipped — the rest of the dashboard is unaffected — and the CLI prints a line saying so at startup.
-- The log formats aren't public APIs. If an update changes them, statuses may degrade — please open an issue.
-
-## Development checks
-
-`npm run test:watcher` runs isolated filesystem regression checks for session discovery, resumed old chats, the hours window, unreadable paths and large logs. It requires Node.js 18+ and never reads your real agent history.
-
-`npm run test:magpie` checks the optional adapter against a local fake Magpie,
-including request/turn distinctions, cross-instance deduplication, independent
-authentication, Docker port mapping, local interface URLs, privacy and failures.
-
-`npm run test:clients` checks isolated Kimi Code, DSH and Grok histories,
-including concurrent tools, approvals, explicit turn endings, metadata
-changes, forks, subagents and DSH compressed-log recovery. Compressed checks
-need either Node's zstd support or the `zstd` executable.
-
-`npm run test:copilot` checks Copilot CLI parsing and discovery. `npm run test:antigravity` checks Antigravity CLI
-parsing, subagents and discovery. `npm run test:hook` checks the optional
-approval hook (marker files, settings install and removal, path validation) and the usage counts behind
-the Today panel and context bars.
-
-Browser development checks require Node.js 20+ (the dashboard itself still runs on Node.js 18+). Run `npm install`, then `npm run build` to rebuild the committed 3D bundle. With Google Chrome installed, `npm run test:ui` runs the browser regression checks against a temporary local server and made-up sessions. Use `WMAD_HEADED=1 npm run test:ui` to see the test windows, or set `WMAD_SCREENSHOTS` to an output folder to save screenshots. The checks cover logo rendering, compact views, settings synchronization, notifications, PiP recovery, video-stream cleanup and responsive settings in light and dark themes. They use Chrome; Firefox and Safari's native video controls still need manual testing.
-
-## License
-
-MIT. 3D models in `assets/kenney/` are by [Kenney](https://kenney.nl), released under CC0 (see the license files there).
+MIT。原始项目版权归 cheoyu 所有，见 [LICENSE](LICENSE)。`assets/kenney/` 下的 3D 模型来自 [Kenney](https://kenney.nl)，以 CC0 发布（许可证文件见该目录）。

@@ -1,3 +1,9 @@
 node_modules/
 *.log
 public/_check.js
+
+# 本地系统文件与截图缓存
+Thumbs.db
+.DS_Store
+test-results/
+shots/
