@@ -134,10 +134,46 @@ function summary(sessions, now) {
   return out;
 }
 
+// A Claude Code conversation has no "done": a finished turn either handed work
+// to subagents that are still running (directing), is asking you something
+// (waiting, set by the parser), or is simply resting (idle). DeepSeek runs and
+// subagent tasks keep done — they really end.
+function markControllers(sessions) {
+  const kids = new Map();
+  for (const s of sessions) {
+    if (!s.parentId) continue;
+    const key = String(s.parentId);
+    if (!kids.has(key)) kids.set(key, []);
+    kids.get(key).push(s);
+  }
+  for (const s of sessions) {
+    if (s.agent !== 'claude' || s.subagent || s.status !== 'done') continue;
+    const seen = new Set([s.key]);
+    const stack = [];
+    for (const ref of [s.id, s.sessionId]) if (ref) stack.push(...(kids.get(String(ref)) || []));
+    let running = 0;
+    while (stack.length) {
+      const c = stack.pop();
+      if (!c || seen.has(c.key)) continue;
+      seen.add(c.key);
+      if (ACTIVE.has(c.status)) running += 1;
+      for (const ref of [c.id, c.sessionId]) if (ref) stack.push(...(kids.get(String(ref)) || []));
+    }
+    if (running) {
+      s.status = 'directing';
+      s.runningChildren = running;
+      s.activity = null;
+    } else {
+      s.status = 'idle';
+    }
+  }
+}
+
 function snapshot(watcher, opts) {
   const now = Date.now();
   const raw = watcher.sessions();
   const sessions = raw.map((s) => view(s, now, opts));
+  markControllers(sessions);
   sessions.sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0));
   return { now, lang: opts.demo ? null : promptLanguage(raw), sessions, summary: summary(sessions, now) };
 }

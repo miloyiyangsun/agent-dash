@@ -83,7 +83,7 @@ Claude Code（CLI / 桌面 / IDE）、Codex、Gemini CLI、Antigravity CLI、Cop
 
 ## 隐私
 
-所有数据都留在本机。页面通过 Server-Sent Events 从本地服务获取状态；`--private` 可隐藏对话正文。日志格式不是公开 API，客户端升级后状态解析可能退化，欢迎提 issue。
+所有数据都留在本机。页面通过 Server-Sent Events 从本地服务获取状态；`--private` 可隐藏对话正文。主控标题优先取 Claude 桌面客户端 `claude-code-sessions` 里的会话名（只读 `cliSessionId`、`title` 等元数据，不读对话内容）。日志格式不是公开 API，客户端升级后状态解析可能退化，欢迎提 issue。
 
 ## 浅色主题
 

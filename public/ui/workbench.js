@@ -12,14 +12,15 @@
   const esc = (s) => (typeof window.esc === 'function' ? window.esc(s) : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const dotClass = (st) => (st === 'idle' ? 'st-interrupted' : `st-${st || 'interrupted'}`);
 
-  const ACTIVE = new Set(['thinking', 'tool', 'typing']);
-  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
-  const STATUS_BAR_ORDER = ['thinking', 'tool', 'typing', 'waiting', 'error', 'done', 'interrupted', 'idle'];
+  const ACTIVE = new Set(['thinking', 'tool', 'typing', 'directing']);
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting', 'directing']);
+  const STATUS_BAR_ORDER = ['thinking', 'tool', 'typing', 'waiting', 'directing', 'error', 'done', 'interrupted', 'idle'];
   const ST_VAR = {
     thinking: '--st-thinking',
     tool: '--st-tool',
     typing: '--st-typing',
     waiting: '--st-waiting',
+    directing: '--st-directing',
     done: '--st-done',
     error: '--st-error',
     interrupted: '--st-interrupted',
@@ -272,6 +273,9 @@
 
   function secondLine(s, ti) {
     const st = s.status || 'idle';
+    if (st === 'directing') {
+      return { text: `${t('directing')} · ${t('directingCount')(Number(s.runningChildren) || 0)}`, cls: 'wb-directing', mono: false };
+    }
     if (st === 'waiting') return { text: t('secondWaiting'), cls: 'wb-wait', mono: false };
     if (st === 'error') {
       if (ti && ti.fromReply) return { text: t('secondError'), cls: 'wb-err', mono: false };

@@ -13,7 +13,7 @@
     const dict = typeof L !== 'undefined' ? L : null;
     return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
   };
-  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting', 'directing']);
 
   const EV = {
     prompt: '--ev-prompt',
@@ -1084,7 +1084,7 @@
 
   // ---------- empty state (T8) ----------
 
-  const ES_ACTIVE = new Set(['thinking', 'tool', 'typing']);
+  const ES_ACTIVE = new Set(['thinking', 'tool', 'typing', 'directing']);
 
   function esMasterTitle(s) {
     const master = findMaster(s);

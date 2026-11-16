@@ -14,12 +14,13 @@
   const WB = () => window.Workbench;
   const nowMs = () => Date.now() - (typeof state !== 'undefined' ? (state.skew || 0) : 0);
 
-  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting', 'directing']);
   const ST_VAR = {
     thinking: '--st-thinking',
     tool: '--st-tool',
     typing: '--st-typing',
     waiting: '--st-waiting',
+    directing: '--st-directing',
     done: '--st-done',
     error: '--st-error',
     interrupted: '--st-interrupted',

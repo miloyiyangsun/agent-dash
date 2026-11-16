@@ -504,6 +504,9 @@ class DeepSeek {
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // BOM on the first line
     if (!text || text.charCodeAt(0) !== 0x7b) return; // '{' only: skip warnings and markers
     try { apply(s, JSON.parse(text)); } catch {}
+    // Keep the parser's status so a run that wakes up again (a heartbeat, a
+    // late tool result) can leave the display-only "interrupted" state.
+    s.parserStatus = s.status;
   }
 
   feed(t, chunk) {
@@ -568,6 +571,7 @@ class DeepSeek {
         const quiet = now - (s.lastEventAt || s.mtime || now);
         let status = s.status;
         if (!s.done && !this.alive(s, now) && quiet > 20_000) status = 'interrupted';
+        else if (s.status === 'interrupted' && s.parserStatus) status = s.parserStatus;
         if (s.done && s.isError) status = 'error';
 
         const live = !s.done;

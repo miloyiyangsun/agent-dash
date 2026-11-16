@@ -48,6 +48,9 @@ const CLAUDE_DIR = path.join(out, '.claude');
 const PROJECT_SHOP = path.join(CLAUDE_DIR, 'projects', 'D--demo-demo-shop');
 const PROJECT_BLOG = path.join(CLAUDE_DIR, 'projects', 'D--demo-blog-engine');
 const RUNS = path.join(CLAUDE_DIR, 'deepseek-runs');
+// The desktop app's per-conversation records, read (never written) by
+// src/claude-titles.js. Their title wins over the ai-title line in the log.
+const CLIENT_ROOT = path.join(out, 'AppData', 'Local', 'Claude-Data', 'claude_demo', 'claude-code-sessions', 'demo', 'demo');
 
 function writeJsonl(file, rows) {
   fs.writeFileSync(file, rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
@@ -643,6 +646,22 @@ function saveRun(base, prompt, cwd, parent, start, lastAt, rows) {
 }
 
 fs.writeFileSync(path.join(out, '.demo-live.json'), JSON.stringify(liveRuns, null, 2));
+
+// Demo client titles. Different from the ai-title lines on purpose: the
+// screenshots should show the desktop app's name winning, like a rename.
+fs.rmSync(CLIENT_ROOT, { recursive: true, force: true });
+fs.mkdirSync(CLIENT_ROOT, { recursive: true });
+function writeClientTitle(cliSessionId, cwd, title, at) {
+  const local = `local_${uid()}`;
+  fs.writeFileSync(path.join(CLIENT_ROOT, `${local}.json`), JSON.stringify({
+    sessionId: local, cliSessionId, cwd, title, titleSource: 'user',
+    isArchived: false, createdAt: at - 60_000, lastActivityAt: at,
+  }, null, 2));
+}
+writeClientTitle(SESSION.m1, SHOP, '演示商店上线收尾', now - 12 * MIN);
+writeClientTitle(SESSION.m2, BLOG, '演示博客发布检查', now - 25 * MIN);
+writeClientTitle(SESSION.s1, SHOP, '演示购物车优惠券', now - 100 * MIN);
+writeClientTitle(SESSION.s2, BLOG, '演示依赖清理', now - 6 * MIN);
 
 console.log(`demo home ready: ${out}`);
 console.log(`  ${PROJECT_SHOP}`);

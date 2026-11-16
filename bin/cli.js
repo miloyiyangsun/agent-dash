@@ -37,6 +37,7 @@ Options:
 
 Reads (never writes):
   ${CLAUDE_DIR}
+  <Claude desktop userData>/claude-code-sessions (conversation titles only)
   ${CODEX_DIR}
   ${GEMINI_DIR}
   ${ANTIGRAVITY_DIR}

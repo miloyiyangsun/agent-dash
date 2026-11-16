@@ -12,7 +12,7 @@
     const dict = typeof L !== 'undefined' ? L : null;
     return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
   };
-  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting', 'directing']);
   const WRITE = new Set(['Write']);
   const EDIT = new Set(['Edit', 'MultiEdit', 'NotebookEdit']);
   const COPY_ICON = '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>';

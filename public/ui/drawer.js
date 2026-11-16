@@ -13,9 +13,9 @@
     const dict = typeof L !== 'undefined' ? L : null;
     return dict?.[k] ?? (lang.startsWith('zh') ? window.I18N?.['zh-CN']?.[k] : null) ?? window.I18N?.en?.[k] ?? k;
   };
-  const ACTIVE = new Set(['thinking', 'tool', 'typing']);
-  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting']);
-  const UNFINISHED = new Set(['thinking', 'tool', 'typing', 'waiting', 'error']);
+  const ACTIVE = new Set(['thinking', 'tool', 'typing', 'directing']);
+  const LIVE = new Set(['thinking', 'tool', 'typing', 'waiting', 'directing']);
+  const UNFINISHED = new Set(['thinking', 'tool', 'typing', 'waiting', 'error', 'directing']);
   const RECENT_LIMIT = 10;
   const dotClass = (st) => (st === 'idle' ? 'st-interrupted' : `st-${st || 'interrupted'}`);
   const statusColor = (st) => {
@@ -176,6 +176,7 @@
   function actionOf(s, ti) {
     const st = s.status || 'idle';
     if (s.stuck) return t('stuck')(s.stuck);
+    if (st === 'directing') return t('directingCount')(Number(s.runningChildren) || 0);
     if (s.activity) return s.activity;
     if (st === 'error') return clip(firstLine(s.error), 90);
     if (st === 'done') return s.reply ? `✓ ${clip(firstLine(s.reply), 90)}` : '';

@@ -136,6 +136,7 @@
   [data-s="tool"] { --s: var(--st-tool); }
   [data-s="typing"] { --s: var(--st-typing); }
   [data-s="waiting"] { --s: var(--st-waiting); }
+  [data-s="directing"] { --s: var(--st-directing); }
   [data-s="done"] { --s: var(--st-done); }
   [data-s="interrupted"] { --s: var(--st-interrupted); }
   [data-s="error"] { --s: var(--st-error); }
@@ -411,7 +412,7 @@ function applyLang(code) {
   if (typeof syncViewSeg === 'function') syncViewSeg();
   requestAnimationFrame(syncTopbar);
   const legend = document.getElementById('legend');
-  if (legend) legend.innerHTML = ['thinking', 'tool', 'typing', 'waiting', 'done', 'error', 'interrupted', 'idle']
+  if (legend) legend.innerHTML = ['thinking', 'tool', 'typing', 'waiting', 'directing', 'done', 'error', 'interrupted', 'idle']
     .map((k) => `<span data-s="${k}"><span class="dot" style="color:var(--s)"></span>${L[k]}</span>`).join('');
   if (typeof renderLangMenu === 'function') renderLangMenu();
   if (typeof office !== 'undefined' && office) office.offDutyLabel = L.wentHome;
@@ -509,7 +510,7 @@ const state = {
 applyTheme();
 let popout = null;
 
-const ACTIVE = new Set(['thinking', 'tool', 'typing']);
+const ACTIVE = new Set(['thinking', 'tool', 'typing', 'directing']);
 const AGENT_NAME = Object.fromEntries(Object.entries(OFFICE_AGENT_BADGES).map(([agent, badge]) => [agent, badge.label]));
 
 // Top-bar heartbeat: active sessions sampled every 10 s, 60 samples = 10 min.
@@ -619,10 +620,26 @@ function renderToday() {
 
 const matchAgent = (s) => !state.agents.length || state.agents.includes(s.agent);
 function visible() {
-  return state.data.sessions.filter((s) =>
-    matchAgent(s) &&
-    (state.showSub || !s.subagent) &&
-    (state.showIdle || s.status !== 'idle'));
+  const list = state.data.sessions.filter((s) =>
+    matchAgent(s) && (state.showSub || !s.subagent));
+  const shown = list.filter((s) => state.showIdle || s.status !== 'idle');
+  if (state.showIdle) return shown;
+  // An idle controller still anchors the children that are visible (a child
+  // waiting on you, for example); keep it in the list so the group survives.
+  const keep = new Set(shown.map((s) => s.key));
+  const byRef = new Map();
+  for (const s of list) {
+    if (s.id) byRef.set(String(s.id), s);
+    if (s.sessionId) byRef.set(String(s.sessionId), s);
+  }
+  for (const s of shown) {
+    let p = s.parentId ? byRef.get(String(s.parentId)) : null;
+    for (let guard = 0; p && guard < 32; guard++) {
+      keep.add(p.key);
+      p = p.parentId ? byRef.get(String(p.parentId)) : null;
+    }
+  }
+  return list.filter((s) => keep.has(s.key));
 }
 
 function reducedMotion() {
@@ -1386,7 +1403,7 @@ connect();
 function statusColor(st) {
   return {
     thinking: 'var(--st-thinking)', tool: 'var(--st-tool)', typing: 'var(--st-typing)',
-    waiting: 'var(--st-waiting)', done: 'var(--st-done)', error: 'var(--st-error)',
+    waiting: 'var(--st-waiting)', directing: 'var(--st-directing)', done: 'var(--st-done)', error: 'var(--st-error)',
     interrupted: 'var(--st-interrupted)', idle: 'var(--st-interrupted)',
   }[st] || 'var(--faint)';
 }

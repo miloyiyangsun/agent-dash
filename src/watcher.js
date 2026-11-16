@@ -18,6 +18,7 @@ const { ompDirs, piDirs } = require('./omp');
 const hook = require('./hook');
 const { DeepSeek, samePrompt } = require('./deepseek');
 const { transcript } = require('./transcript');
+const { ClientTitles } = require('./claude-titles');
 
 const HEAD_BYTES = 128 * 1024;
 const TAIL_BYTES = 768 * 1024;
@@ -267,6 +268,8 @@ class Watcher extends EventEmitter {
     this.externalKey = '';
     // DeepSeek children spawned through ask_deepseek.py, read from their own logs.
     this.deepseek = new DeepSeek({ claudeDir: CLAUDE_DIR, hours, interval });
+    // Titles the Claude desktop app shows for its Code-tab conversations.
+    this.clientTitles = new ClientTitles({ home });
     // Controllers older than the window are loaded as summaries so the graph
     // can still show who delegated a recent run.
     this.claudeLites = new Map();     // session id -> { at, session }
@@ -377,6 +380,8 @@ class Watcher extends EventEmitter {
         ...antigravityFiles(since)];
       // These have no file to tail, so they refresh with the walk.
       if (this.loadExternal(since)) changed = true;
+      // A rename in the Claude client should show up without a new log line.
+      if (this.clientTitles.refresh()) changed = true;
     }
 
     for (const c of this.candidates) {
@@ -688,6 +693,7 @@ class Watcher extends EventEmitter {
     out.push(...this.deepseek.sessions());
     if (!this.magpies.length) {
       this.finalizeParents(out);
+      this.finalizeTitles(out);
       return out;
     }
     const remote = new Map();
@@ -720,6 +726,7 @@ class Watcher extends EventEmitter {
     });
     const all = merged.concat([...remote.values()]);
     this.finalizeParents(all);
+    this.finalizeTitles(all);
     return all;
   }
 
@@ -848,6 +855,15 @@ class Watcher extends EventEmitter {
         if (!ps) break;
         p = ps.parentId;
       }
+    }
+  }
+  // The Claude client's own title (auto-generated or renamed) wins over the
+  // first prompt. Subagents and other clients keep their parsed titles.
+  finalizeTitles(all) {
+    for (const s of all) {
+      if (s.agent !== 'claude' || s.subagent) continue;
+      const title = this.clientTitles.get(s.id) || this.clientTitles.get(s.sessionId);
+      if (title) s.title = title;
     }
   }
 }

@@ -7,7 +7,7 @@
   const TW = 64; // tile width px
   const TH = 32; // tile height px; one z unit is TH px too
   const WALL_H = 2.4;
-  const WORKING = new Set(['thinking', 'tool', 'typing', 'waiting', 'error']);
+  const WORKING = new Set(['thinking', 'tool', 'typing', 'waiting', 'error', 'directing']);
   const MAX_WANDERERS = 7;
   const SPEED = 2.1; // tiles / second
 
@@ -53,7 +53,7 @@
   // Status colours come from the CSS tokens so the office matches the lists
   // and follows the theme; the old values are only a fallback.
   const STATUS_FALLBACK = {
-    thinking: '#8b6be6', tool: '#3b8ee0', typing: '#22a874', waiting: '#e09412',
+    thinking: '#8b6be6', tool: '#3b8ee0', typing: '#22a874', waiting: '#e09412', directing: '#c4532a',
     done: '#5f9a4c', error: '#de4b40', interrupted: '#9b9a94', idle: '#9b9a94',
   };
   const STATUS_COLOR = { ...STATUS_FALLBACK };
