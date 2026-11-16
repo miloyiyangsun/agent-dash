@@ -328,6 +328,7 @@
             rootKey: rootS.key,
             to,
             status,
+            internal: !n.summary && !!n.p.s.internal,
             d: `M${mx.toFixed(1)} ${my.toFixed(1)}H${busX.toFixed(1)}V${feedY.toFixed(1)}H${colBusX.toFixed(1)}V${cy.toFixed(1)}H${n.x.toFixed(1)}`,
           });
         } else {
@@ -338,6 +339,7 @@
             to,
             status,
             summary: !!n.summary,
+            internal: !n.summary && !!n.p.s.internal,
           });
         }
       }
@@ -419,11 +421,14 @@
     const tagW = tag ? Math.min(64, measure(tag, CHIP) + 14) : 0;
     const tagText = tag ? truncate(tag, Math.max(20, tagW - 12), CHIP) : '';
     const titleX = 10 + (tagW ? tagW + 6 : 0);
-    const title = truncate(ti.title || s.project || s.agent || '', NODE_W - titleX - 10, SANS);
+    const internal = !!s.internal;
+    const badgeW = internal ? 60 : 0;
+    const title = truncate(ti.title || s.project || s.agent || '', NODE_W - titleX - 10 - (internal ? badgeW + 6 : 0), SANS);
     const { word, act } = subText(s, ti);
     const stW = measure(word, MONO);
     const actText = act && NODE_W - 20 - stW - 10 > 16 ? truncate(act, NODE_W - 20 - stW - 10, MONO) : '';
     const cls = ['topo-node', `is-${kind}`];
+    if (internal) cls.push('is-internal');
     if (selKey === s.key || selected) cls.push('is-sel');
     if (hoverKey === s.key) cls.push('is-hi');
     const tip = [ti.tag, ti.title].filter(Boolean).join(' · ') || s.project || s.agent || '';
@@ -433,6 +438,7 @@
       <rect class="topo-spine" x="0.5" y="1" width="3" height="${NODE_H - 2}" rx="1.5"/>
       ${tagW ? `<rect class="topo-chip" x="10" y="10" width="${tagW.toFixed(1)}" height="18" rx="9"/><text class="topo-chip-t" x="${(10 + tagW / 2).toFixed(1)}" y="23" text-anchor="middle">${esc(tagText)}</text>` : ''}
       <text class="topo-title" x="${titleX.toFixed(1)}" y="23">${esc(title)}</text>
+      ${internal ? `<rect class="topo-internal-bg" x="${(NODE_W - badgeW - 8).toFixed(1)}" y="9" width="${badgeW}" height="18" rx="9"/><text class="topo-internal-t" x="${(NODE_W - badgeW / 2 - 8).toFixed(1)}" y="22" text-anchor="middle">${esc(t('topoInternal'))}</text>` : ''}
       <text class="topo-sub" x="10" y="42"><tspan class="topo-st">${esc(word)}</tspan>${actText ? `<tspan class="topo-act"> · ${esc(actText)}</tspan>` : ''}</text>
     </g>`;
   }
@@ -442,6 +448,7 @@
     const kind = statusOf(e.to.s);
     const cls = ['topo-edge', `is-${kind}`];
     if (kind === 'live') cls.push('is-flow');
+    if (e.to.s.internal) cls.push('is-internal');
     if (hoverKey && (e.from.s.key === hoverKey || e.to.s.key === hoverKey)) cls.push('is-hi');
     const x1 = e.from.x + NODE_W;
     const y1 = e.from.y + NODE_H / 2;
@@ -468,6 +475,7 @@
     const kind = statusOf({ status: b.status });
     const cls = ['topo-edge', 'is-bus', `is-${kind}`];
     if (kind === 'live') cls.push('is-flow');
+    if (b.internal) cls.push('is-internal');
     if (b.summary) cls.push('is-summary');
     if (hoverKey && (b.rootKey === hoverKey || b.to === hoverKey)) cls.push('is-hi');
     return `<path class="${cls.join(' ')}" data-from="${esc(b.rootKey)}" data-to="${esc(b.to)}" style="--edge:var(--st-${stToken(b.status)})" d="${b.d}"/>`;

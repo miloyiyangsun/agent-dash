@@ -179,6 +179,48 @@ function samePrompt(a, b) {
   return norm(a) === norm(b);
 }
 
+// A dispatcher script (`powershell -File …\_run-task.ps1 -Id T13`) is a real
+// delegation even though its command never spells out ask_deepseek.py. The
+// script itself is checked once per mtime; only a script that launches
+// ask_deepseek.py counts, and only an actual invocation (not a Read/sed of it).
+function scriptInvocation(command) {
+  const src = String(command || '');
+  let m = src.match(/(?:^|\s)-File\s+("([^"]+)"|'([^']+)'|(\S+))/i);
+  let file = m && (m[2] || m[3] || m[4]);
+  if (!file) {
+    m = src.match(/(?:^|\s)(?:bash|sh|zsh)\s+("([^"]+\.sh)"|'([^']+\.sh)'|(\S+\.sh))/i);
+    file = m && (m[2] || m[3] || m[4]);
+  }
+  if (!file) {
+    m = src.match(/(?:^|\s)(?:cmd(?:\.exe)?\s+\/c\s+)?("([^"]+\.(?:cmd|bat))"|'([^']+\.(?:cmd|bat))'|(\S+\.(?:cmd|bat)))/i);
+    file = m && (m[2] || m[3] || m[4]);
+  }
+  if (!file) {
+    m = src.match(/(?:^|\s)&\s*("([^"]+\.ps1)"|'([^']+\.ps1)'|(\S+\.ps1))/i);
+    file = m && (m[2] || m[3] || m[4]);
+  }
+  if (!file) return null;
+  file = String(file).replace(/^["']|["']$/g, '').trim();
+  if (!/\.(ps1|cmd|bat|sh)$/i.test(file)) return null;
+  const tag = (src.match(/(?:^|\s)(?:-Id|--id|-Task|--task)\s+("?)([A-Za-z]{0,3}\d+[A-Za-z]?)\1/i) || [])[2] || null;
+  return { file, tag };
+}
+
+// The run cwd must contain the dispatcher script; that keeps a same-tag task
+// in another project from being attached to the wrong controller.
+function pathUnder(cwd, file) {
+  if (!cwd || !file) return false;
+  const norm = (p) => path.resolve(String(p)).replace(/\\/g, '/').replace(/\/+$/, '');
+  const root = norm(cwd);
+  const target = path.isAbsolute(String(file)) ? norm(file) : norm(path.join(String(cwd), String(file)));
+  const same = process.platform === 'win32' ? root.toLowerCase() === target.toLowerCase()
+    : root === target;
+  const under = process.platform === 'win32'
+    ? target.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+    : target.startsWith(`${root}/`);
+  return same || under;
+}
+
 function newSession(base, file) {
   return {
     agent: 'deepseek',
@@ -244,7 +286,9 @@ function apply(s, o) {
     if (o.subtype === 'init') {
       if (!s.sessionId && o.session_id) s.sessionId = o.session_id;
       if (o.cwd) s.cwd = o.cwd;
-      if (!s.startedAt) s.startedAt = at || s.startedAt;
+      // meta.started_ts is rewritten when the run finishes, so the init event
+      // is the reliable start time for a completed run.
+      if (at && (!s.startedAt || at < s.startedAt)) s.startedAt = at;
     } else if (o.subtype === 'thinking_tokens') {
       const n = Number(o.estimated_tokens);
       if (Number.isFinite(n) && n > s.thinkingTokens) s.thinkingTokens = n;
@@ -425,11 +469,15 @@ class DeepSeek {
       if (meta.cwd) s.cwd = meta.cwd;
       if (meta.effort) s.effort = meta.effort;
       if (meta.model) s.title = null;
-      if (Number.isFinite(meta.started_ts)) s.startedAt = Math.round(meta.started_ts * 1000);
+      if (!s.startedAt && Number.isFinite(meta.started_ts)) s.startedAt = Math.round(meta.started_ts * 1000);
       if (Number.isFinite(meta.pid)) s.pid = meta.pid;
     }
     s.mtime = f.st.mtimeMs;
-    if (!s.startedAt) s.startedAt = Math.round(f.st.birthtimeMs || f.st.mtimeMs);
+    // ask_deepseek.py rewrites started_ts when the run finishes; the log file's
+    // birth time is the actual start and matches the run-YYYYmmdd-HHMMSS name.
+    const born = Math.round(f.st.birthtimeMs || 0);
+    if (born > 0) s.startedAt = born;
+    else if (!s.startedAt) s.startedAt = Math.round(f.st.mtimeMs);
 
     const size = f.st.size;
     const readHead = Math.min(size, headBytes);
@@ -498,14 +546,14 @@ class DeepSeek {
   // Old runs were written before ask_deepseek.py learned to save the prompt in a
   // meta file. The brain's own Bash command still carries the original text, so
   // DelegationIndex is the fallback when the meta is missing.
-  delegatedPrompt(s) {
-    const rec = s.delegate || this.delegations.lookup(s);
+  delegatedPrompt(s, exclude) {
+    const rec = s.delegate || this.delegations.lookup(s, exclude);
     const text = rec && typeof rec.prompt === 'string' ? rec.prompt.trim() : '';
     return text || null;
   }
 
   sessions(now = Date.now()) {
-    const out = [];
+    const runs = [];
     const groups = [
       { lite: false, list: [...this.trackers.values()].map((t) => t.session) },
       { lite: true, list: [...this.lites.values()].map((l) => l.session) },
@@ -514,19 +562,8 @@ class DeepSeek {
       for (const s of list) {
         const meta = this.loadMeta(s.file);
         if (meta && s.pid == null && Number.isFinite(meta.pid)) s.pid = meta.pid;
-        s.delegate = this.delegations.parentOf(s);
-        // Order: meta.prompt → the prompt inside the delegation command → empty.
-        if (!s.prompt) {
-          const fromDelegate = this.delegatedPrompt(s);
-          if (fromDelegate) {
-            s.prompt = fromDelegate;
-            if (!s.title) s.title = taskTag(fromDelegate);
-          }
-        }
-        // ask_deepseek.py now records the brain's own session id in the meta.
-        // That explicit link wins over any transcript-based guess.
-        const metaParent = meta && typeof meta.parent_session_id === 'string' ? meta.parent_session_id : null;
-        s.parentId = metaParent || (s.delegate ? s.delegate.sessionId : null);
+        s.metaParent = meta && typeof meta.parent_session_id === 'string' && meta.parent_session_id.trim()
+          ? meta.parent_session_id.trim() : null;
 
         const quiet = now - (s.lastEventAt || s.mtime || now);
         let status = s.status;
@@ -536,28 +573,81 @@ class DeepSeek {
         const live = !s.done;
         if (!lite && !live && quiet > this.windowMs) continue;
         s.status = status;
-        s.stuck = 0;
-        // The result line's num_turns covers the whole run; the event counter
-        // only sees the head+tail window, so prefer the authoritative number.
-        if (Number.isFinite(s.numTurns) && s.numTurns > 0) s.turns = s.numTurns;
-        if (status === 'tool' && s.activity) {
-          const stuckAfter = 10 * 60_000;
-          if (quiet > stuckAfter) s.stuck = Math.floor(quiet / 60_000);
-        }
-        // A run that started before midnight still belongs to the day it last moved.
-        s.daily = { day: dayKey(s.lastEventAt || now), turns: s.turns, tokens: s.outTokens || s.thinkingTokens || 0 };
-        out.push(s);
+        runs.push(s);
       }
     }
-    return out;
+
+    // A child session id maps to the run that owns it. It is a process link,
+    // never the user's controller: a child that re-dispatches a task records
+    // its own id in the next run's meta, which would otherwise draw the chain
+    // T13 → T13 → T13b.
+    const byChild = new Map();
+    for (const s of runs) if (s.sessionId) byChild.set(s.sessionId, s);
+    const childIds = new Set(byChild.keys());
+
+    for (const s of runs) {
+      s.delegate = this.delegations.lookup(s, childIds) || null;
+      // Order: meta.prompt → the prompt inside the delegation command → empty.
+      if (!s.prompt) {
+        const fromDelegate = this.delegatedPrompt(s, childIds);
+        if (fromDelegate) {
+          s.prompt = fromDelegate;
+          if (!s.title) s.title = taskTag(fromDelegate);
+        }
+      }
+      s.delegateParent = s.delegate && s.delegate.sessionId
+        && s.delegate.sessionId !== s.sessionId && !childIds.has(s.delegate.sessionId)
+        ? s.delegate.sessionId : null;
+    }
+
+    // meta.parent_session_id wins when it names a real session. When it names
+    // another DeepSeek child, walk that child's own parent instead, so every
+    // run ends up under the controller that started the chain.
+    const resolve = (run) => {
+      let p = run.metaParent;
+      if (!p || p === run.sessionId) p = run.delegateParent;
+      const seen = new Set();
+      let guard = 0;
+      while (p && byChild.has(p)) {
+        if (p === run.sessionId || seen.has(p) || guard++ > 32) return null;
+        seen.add(p);
+        const parentRun = byChild.get(p);
+        if (parentRun === run) return null;
+        let q = parentRun.metaParent;
+        if (!q || q === parentRun.sessionId) q = parentRun.delegateParent;
+        p = q;
+      }
+      if (p && p !== run.sessionId) return p;
+      return run.delegateParent || null;
+    };
+    for (const s of runs) {
+      s.parentId = resolve(s);
+      s.stuck = 0;
+      // The result line's num_turns covers the whole run; the event counter
+      // only sees the head+tail window, so prefer the authoritative number.
+      if (Number.isFinite(s.numTurns) && s.numTurns > 0) s.turns = s.numTurns;
+      const quiet = now - (s.lastEventAt || s.mtime || now);
+      if (s.status === 'tool' && s.activity && quiet > 10 * 60_000) {
+        s.stuck = Math.floor(quiet / 60_000);
+      }
+      // A run that started before midnight still belongs to the day it last moved.
+      s.daily = { day: dayKey(s.lastEventAt || now), turns: s.turns, tokens: s.outTokens || s.thinkingTokens || 0 };
+    }
+    return runs;
   }
 
   // Child runs write a normal Claude Code transcript too; those rows carry no
   // tool results and no thinking, so the richer run record replaces them.
+  childRuns() {
+    const out = [];
+    for (const t of this.trackers.values()) out.push(t.session);
+    for (const l of this.lites.values()) out.push(l.session);
+    return out;
+  }
+
   childSessionIds() {
     const ids = new Set();
-    for (const t of this.trackers.values()) if (t.session.sessionId) ids.add(t.session.sessionId);
-    for (const l of this.lites.values()) if (l.session.sessionId) ids.add(l.session.sessionId);
+    for (const s of this.childRuns()) if (s.sessionId) ids.add(s.sessionId);
     return ids;
   }
 
@@ -732,10 +822,24 @@ class DelegationIndex {
   constructor(claudeDir, hours = 24) {
     this.dir = claudeDir;
     this.windowMs = hours * 3600 * 1000;
-    this.byToolUse = new Map(); // tool_use id -> { sessionId, at, prompt, run }
+    this.byToolUse = new Map(); // tool_use id -> { sessionId, at, prompt, run, tag, script, viaScript }
     this.byRun = new Map();     // run base -> tool_use id
     this.lastScan = 0;
     this.files = new Map();     // file -> { offset, partial, size }
+    this.scriptCache = new Map(); // script path -> { mtime, size, ok }
+  }
+
+  // A dispatcher script counts only when its own text launches ask_deepseek.py.
+  scriptLaunches(file) {
+    const p = path.resolve(String(file || ''));
+    const st = statSafe(p);
+    if (!st || !st.isFile() || st.size > 512 * 1024) return false;
+    const hit = this.scriptCache.get(p);
+    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit.ok;
+    let ok = false;
+    try { ok = fs.readFileSync(p, 'utf8').includes('ask_deepseek.py'); } catch { ok = false; }
+    this.scriptCache.set(p, { mtime: st.mtimeMs, size: st.size, ok });
+    return ok;
   }
 
   scan(now) {
@@ -787,6 +891,8 @@ class DelegationIndex {
       // exact match. A result for one of our tool_uses can be many megabytes and
       // only the run name matters, so grab it from the raw line and move on.
       const note = line.indexOf('<task-notification>') >= 0;
+      const maybeScript = line.indexOf('.ps1') >= 0 || line.indexOf('.cmd') >= 0
+        || line.indexOf('.bat') >= 0 || line.indexOf('.sh') >= 0;
       if (line.indexOf('ask_deepseek') < 0) {
         const idm = line.match(/"tool_use_id"\s*:\s*"([^"]+)"/);
         if (idm && this.byToolUse.has(idm[1])) {
@@ -797,7 +903,7 @@ class DelegationIndex {
           }
           continue;
         }
-        if (!note) continue;
+        if (!note && !maybeScript) continue;
       }
       let o = null;
       try { o = JSON.parse(line); } catch { continue; }
@@ -831,6 +937,21 @@ class DelegationIndex {
           const at = o.timestamp ? Date.parse(o.timestamp) : null;
           this.byToolUse.set(c.id, { sessionId: o.sessionId || sessionId, at, prompt: promptFromArgs(args), run: null });
           changed = true;
+        } else if (c.type === 'tool_use' && c.input && typeof c.input.command === 'string') {
+          const inv = scriptInvocation(c.input.command);
+          if (!inv || !this.scriptLaunches(inv.file)) continue;
+          if (this.byToolUse.has(c.id)) continue;
+          const at = o.timestamp ? Date.parse(o.timestamp) : null;
+          this.byToolUse.set(c.id, {
+            sessionId: o.sessionId || sessionId,
+            at,
+            prompt: null,
+            run: null,
+            tag: inv.tag,
+            script: inv.file,
+            viaScript: true,
+          });
+          changed = true;
         } else if (c.type === 'tool_result' && c.tool_use_id && this.byToolUse.has(c.tool_use_id)) {
           const rec = this.byToolUse.get(c.tool_use_id);
           const flat = Array.isArray(c.content)
@@ -856,32 +977,62 @@ class DelegationIndex {
   tick(watch) {
     const now = Date.now();
     let changed = this.scan(now);
+    const exclude = new Set();
+    for (const t of watch.trackers.values()) if (t.session.sessionId) exclude.add(t.session.sessionId);
+    for (const l of watch.lites.values()) if (l.session.sessionId) exclude.add(l.session.sessionId);
     for (const t of watch.trackers.values()) {
       const s = t.session;
-      const rec = this.lookup(s);
+      const rec = this.lookup(s, exclude);
       if (rec !== s.delegate) { s.delegate = rec; changed = true; }
     }
     return changed;
   }
 
-  lookup(s) {
+  lookup(s, exclude) {
+    // A DeepSeek child writes its own Claude transcript; that transcript is not
+    // a delegator. Its id must never become the parent of any run.
+    const skip = (rec) => {
+      if (!rec || !rec.sessionId) return true;
+      if (rec.sessionId === s.sessionId) return true;
+      return exclude ? exclude.has(rec.sessionId) : false;
+    };
     const id = this.byRun.get(s.base);
-    if (id) return this.byToolUse.get(id) || null;
+    if (id) {
+      const rec = this.byToolUse.get(id);
+      if (rec && !skip(rec)) return rec;
+    }
     if (!s.prompt) return null;
+    const start = Number.isFinite(s.startedAt) ? s.startedAt : null;
     // Still running: the run file name has not been printed yet, so fall back to
-    // the prompt text embedded in the brain's own command.
+    // the prompt text embedded in the brain's own command. When several runs
+    // share a prompt, the closest call before this run's start wins.
     let best = null;
     for (const rec of this.byToolUse.values()) {
-      if (rec.run) continue;
+      if (rec.run || rec.viaScript) continue;
       if (!samePrompt(rec.prompt, s.prompt)) continue;
-      if (!best || (rec.at || 0) < (best.at || 0)) best = rec;
+      if (skip(rec)) continue;
+      const at = rec.at || 0;
+      if (start && (at > start + 60_000 || start - at > 10 * 60_000)) continue;
+      if (!best) { best = rec; continue; }
+      if (start ? at > (best.at || 0) : at < (best.at || 0)) best = rec;
+    }
+    if (best) return best;
+    // A dispatcher script (`_run-task.ps1 -Id T13`) carries the task id, not the
+    // prompt. Match it by tag, start time, and the script sitting under cwd.
+    const tag = taskTag(s.prompt);
+    if (!tag || !start || !s.cwd) return null;
+    for (const rec of this.byToolUse.values()) {
+      if (!rec.viaScript || rec.run || !rec.tag) continue;
+      if (String(rec.tag).toLowerCase() !== String(tag).toLowerCase()) continue;
+      if (skip(rec)) continue;
+      const at = rec.at || 0;
+      if (!at || at > start + 60_000 || start - at > 10 * 60_000) continue;
+      if (!pathUnder(s.cwd, rec.script)) continue;
+      if (!best || at > (best.at || 0)) best = rec;
     }
     return best;
   }
 
-  parentOf(s) {
-    return s.delegate || null;
-  }
 }
 
-module.exports = { DeepSeek, DS_DIR: path.join(os.homedir(), '.claude', 'deepseek-runs'), extractPrompt, taskTag };
+module.exports = { DeepSeek, DS_DIR: path.join(os.homedir(), '.claude', 'deepseek-runs'), extractPrompt, taskTag, samePrompt };

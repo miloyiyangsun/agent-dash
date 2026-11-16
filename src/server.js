@@ -65,6 +65,8 @@ function view(s, now, { privacy }) {
     sessionId: s.sessionId || null,
     parentId: s.parentId,
     subagent: s.subagent,
+    internal: !!s.internal,
+    ...(s.liteParent ? { lite: true } : {}),
     cwd: s.cwd,
     project: s.cwd ? `${s.agent === 'copilot' ? 'workspace-' : ''}${path.basename(s.cwd)}` : null,
     title: s.title,

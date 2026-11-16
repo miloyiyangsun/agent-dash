@@ -16,7 +16,7 @@ const { clientFiles, metadata, applyKimi, applyDsh, applyGrok, readDsh } = requi
 const external = require('./external');
 const { ompDirs, piDirs } = require('./omp');
 const hook = require('./hook');
-const { DeepSeek } = require('./deepseek');
+const { DeepSeek, samePrompt } = require('./deepseek');
 const { transcript } = require('./transcript');
 
 const HEAD_BYTES = 128 * 1024;
@@ -267,6 +267,10 @@ class Watcher extends EventEmitter {
     this.externalKey = '';
     // DeepSeek children spawned through ask_deepseek.py, read from their own logs.
     this.deepseek = new DeepSeek({ claudeDir: CLAUDE_DIR, hours, interval });
+    // Controllers older than the window are loaded as summaries so the graph
+    // can still show who delegated a recent run.
+    this.claudeLites = new Map();     // session id -> { at, session }
+    this.claudeFileCache = new Map(); // session id -> { at, file }
   }
 
   start() {
@@ -611,10 +615,17 @@ class Watcher extends EventEmitter {
 
   sessions() {
     const out = [];
-    // A DeepSeek child leaves two logs behind; the run record below is the rich one.
-    const children = this.deepseek.childSessionIds();
+    // A DeepSeek child leaves two logs behind; the run record below is the rich
+    // one. The init event's session id is exact; the cwd+prompt+start-time
+    // fallback covers a child log whose init line has not been read yet.
+    const dsRuns = this.deepseek.childRuns();
+    const children = new Set();
+    for (const r of dsRuns) if (r.sessionId) children.add(r.sessionId);
     for (const t of this.trackers.values()) {
-      if (children.size && t.session.agent === 'claude' && children.has(t.session.id)) continue;
+      if (t.session.agent === 'claude' && !t.session.subagent) {
+        if (children.size && children.has(t.session.id)) continue;
+        if (this.isDeepSeekChild(t.session, dsRuns)) continue;
+      }
       const s = t.session;
       if (OMP_LIKE.has(s.agent)) {
         // Skip stray JSONL files and logs whose header isn't written yet.
@@ -675,7 +686,10 @@ class Watcher extends EventEmitter {
     }
     out.push(...this.external);
     out.push(...this.deepseek.sessions());
-    if (!this.magpies.length) return out;
+    if (!this.magpies.length) {
+      this.finalizeParents(out);
+      return out;
+    }
     const remote = new Map();
     // Magpie's native records carry richer metadata than gateway projections.
     // Prefer those, then the newest record; any healthy in-flight call counts.
@@ -704,7 +718,137 @@ class Watcher extends EventEmitter {
       return other ? { ...s, title: s.title || other.title, cwd: s.cwd || other.cwd, model: s.model || other.model,
         parentId: s.parentId || other.parentId, subagent: s.subagent || other.subagent } : s;
     });
-    return merged.concat([...remote.values()]);
+    const all = merged.concat([...remote.values()]);
+    this.finalizeParents(all);
+    return all;
+  }
+
+  // A child log that predates ask_deepseek.py's init line is still the same
+  // conversation: same cwd, same first prompt, started within ten seconds.
+  isDeepSeekChild(s, runs) {
+    if (!s.cwd || !s.prompt || !Number.isFinite(s.startedAt)) return false;
+    const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const cwd = norm(s.cwd);
+    return runs.some((r) => r.prompt && r.cwd && norm(r.cwd) === cwd
+      && Math.abs((Number(r.startedAt) || 0) - s.startedAt) < 10_000
+      && samePrompt(r.prompt, s.prompt));
+  }
+
+  claudeFileById(id) {
+    const cached = this.claudeFileCache.get(id);
+    if (cached && Date.now() - cached.at < 30_000) return cached.file;
+    let file = null;
+    for (const proj of ls(CLAUDE_DIR)) {
+      if (!proj.isDirectory()) continue;
+      const candidate = path.join(CLAUDE_DIR, proj.name, `${id}.jsonl`);
+      if (statSafe(candidate)) { file = candidate; break; }
+    }
+    this.claudeFileCache.set(id, { at: Date.now(), file });
+    return file;
+  }
+
+  // Only what the graph needs: title, project (cwd), status, time.
+  claudeLite(id) {
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return null;
+    const cached = this.claudeLites.get(id);
+    if (cached && Date.now() - cached.at < 60_000) return cached.session;
+    const file = this.claudeFileById(id);
+    if (!file) {
+      this.claudeLites.set(id, { at: Date.now(), session: null });
+      return null;
+    }
+    const st = statSafe(file);
+    if (!st) return null;
+    const s = newSession('claude', id, file);
+    s.sessionId = id;
+    s.mtime = st.mtimeMs;
+    const feed = (text, dropFirst) => {
+      const lines = text.split('\n');
+      if (dropFirst) lines.shift();
+      for (const line of lines) {
+        if (!line) continue;
+        let d;
+        try { d = JSON.parse(line); } catch { continue; }
+        try { applyClaude(s, d); } catch {}
+      }
+    };
+    if (st.size <= HEAD_BYTES + TAIL_BYTES) {
+      feed(readRange(file, 0, st.size), false);
+    } else {
+      feed(readRange(file, 0, HEAD_BYTES), false);
+      feed(readRange(file, st.size - TAIL_BYTES, st.size), true);
+    }
+    s.liteParent = true;
+    if (!s.lastEventAt) s.lastEventAt = st.mtimeMs;
+    if (!s.startedAt) s.startedAt = st.birthtimeMs || st.mtimeMs;
+    this.claudeLites.set(id, { at: Date.now(), session: s });
+    return s;
+  }
+
+  // The graph is a control graph: every parent must be a visible session.
+  // A controller outside the window is loaded as a light summary; when even
+  // that fails the run stays standalone instead of being hung under a guess.
+  finalizeParents(all) {
+    const byRef = new Map();
+    for (const s of all) {
+      if (s.id) byRef.set(String(s.id), s);
+      if (s.sessionId) byRef.set(String(s.sessionId), s);
+    }
+    const deepChildren = this.deepseek.childSessionIds();
+    const wanted = new Map();
+    for (const s of all) {
+      if (s.agent !== 'deepseek' || !s.parentId) continue;
+      const p = String(s.parentId);
+      if (p === String(s.id) || p === String(s.sessionId)) { s.parentId = null; continue; }
+      if (byRef.has(p)) continue;
+      if (deepChildren.has(p)) { s.parentId = null; continue; }
+      wanted.set(p, s);
+    }
+    for (const [id, s] of wanted) {
+      const lite = this.claudeLite(id);
+      if (lite) {
+        all.push(lite);
+        byRef.set(id, lite);
+        if (lite.sessionId) byRef.set(String(lite.sessionId), lite);
+      } else {
+        s.parentId = null;
+      }
+    }
+    // A cycle can never be drawn as a tree, and a dangling parent is a root.
+    for (const s of all) {
+      if (!s.parentId) continue;
+      let cur = s;
+      let guard = 0;
+      while (cur && cur.parentId && guard++ < 64) {
+        const p = byRef.get(String(cur.parentId));
+        if (!p) {
+          if (cur === s && s.agent === 'deepseek') s.parentId = null;
+          break;
+        }
+        if (p === s) { s.parentId = null; break; }
+        cur = p;
+      }
+    }
+    // Claude Code's own Agent/Task subagents inside a DeepSeek run are real
+    // nesting, but they are not the user's controller.
+    const deepIds = new Set();
+    for (const s of all) {
+      if (s.agent !== 'deepseek') continue;
+      if (s.id) deepIds.add(String(s.id));
+      if (s.sessionId) deepIds.add(String(s.sessionId));
+    }
+    for (const s of all) {
+      s.internal = false;
+      if (s.agent !== 'claude' || !s.subagent) continue;
+      let p = s.parentId;
+      let guard = 0;
+      while (p && guard++ < 32) {
+        if (deepIds.has(String(p))) { s.internal = true; break; }
+        const ps = byRef.get(String(p));
+        if (!ps) break;
+        p = ps.parentId;
+      }
+    }
   }
 }
 
