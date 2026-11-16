@@ -27,7 +27,7 @@
   const GROUP_GAP = 24;
   const GRID_GAP = 12;
   const PAD = 32;
-  const SMALL_MAX = 4;     // above this a group switches to the bus + grid layout
+  const SMALL_MAX = 8;     // above this a group switches to the bus + grid layout
   const DONE_LIMIT = 12;   // more completed children than this fold into one node
 
   const SANS = '600 12.5px "Microsoft YaHei UI","PingFang SC",system-ui,sans-serif';
@@ -309,21 +309,37 @@
     const bottom = gridTop + gridH;
     const mx = PAD + NODE_W;
     const my = masterY + NODE_H / 2;
-    busList.push({ rootKey: rootS.key, d: `M${mx.toFixed(1)} ${my.toFixed(1)}H${busX.toFixed(1)}M${busX.toFixed(1)} ${feedY.toFixed(1)}V${bottom.toFixed(1)}` });
+    busList.push({ type: 'trunk', rootKey: rootS.key, d: `M${mx.toFixed(1)} ${my.toFixed(1)}H${busX.toFixed(1)}M${busX.toFixed(1)} ${feedY.toFixed(1)}V${bottom.toFixed(1)}` });
     colsData.forEach((nodes, col) => {
       if (!nodes.length) return;
       const colBusX = gridX + col * (NODE_W + GRID_GAP) - GRID_GAP / 2;
       const colBottom = Math.max(...nodes.map((n) => n.y + n.h / 2));
-      busList.push({ rootKey: rootS.key, d: `M${busX.toFixed(1)} ${feedY.toFixed(1)}H${colBusX.toFixed(1)}M${colBusX.toFixed(1)} ${feedY.toFixed(1)}V${colBottom.toFixed(1)}` });
+      busList.push({ type: 'trunk', rootKey: rootS.key, d: `M${busX.toFixed(1)} ${feedY.toFixed(1)}H${colBusX.toFixed(1)}M${colBusX.toFixed(1)} ${feedY.toFixed(1)}V${colBottom.toFixed(1)}` });
       for (const n of nodes) {
         const cy = n.y + n.h / 2;
-        busList.push({
-          rootKey: rootS.key,
-          d: `M${colBusX.toFixed(1)} ${cy.toFixed(1)}H${n.x.toFixed(1)}`,
-          to: n.summary ? `summary:${rootS.key}` : n.p.s.key,
-          status: n.summary ? 'done' : (n.p.s.status || 'idle'),
-          summary: !!n.summary,
-        });
+        const to = n.summary ? `summary:${rootS.key}` : n.p.s.key;
+        const status = n.summary ? 'done' : (n.p.s.status || 'idle');
+        if (!n.summary && ACTIVE.has(status)) {
+          // A live child keeps its whole route coloured and flowing: shared
+          // trunk from the master, the drop into its column and the stub. The
+          // dashes then read as one continuous path from master to child.
+          busList.push({
+            type: 'route',
+            rootKey: rootS.key,
+            to,
+            status,
+            d: `M${mx.toFixed(1)} ${my.toFixed(1)}H${busX.toFixed(1)}V${feedY.toFixed(1)}H${colBusX.toFixed(1)}V${cy.toFixed(1)}H${n.x.toFixed(1)}`,
+          });
+        } else {
+          busList.push({
+            type: 'branch',
+            rootKey: rootS.key,
+            d: `M${colBusX.toFixed(1)} ${cy.toFixed(1)}H${n.x.toFixed(1)}`,
+            to,
+            status,
+            summary: !!n.summary,
+          });
+        }
       }
     });
     return { h: Math.max(groupH, tailBottom - y), right: Math.max(gridRight, tailRight) };
@@ -445,7 +461,7 @@
   }
 
   function busMarkup(b) {
-    if (!b.to) {
+    if (b.type === 'trunk') {
       const hi = hoverKey && hoverKey === b.rootKey;
       return `<path class="topo-bus${hi ? ' is-hi' : ''}" data-from="${esc(b.rootKey)}" d="${b.d}"/>`;
     }

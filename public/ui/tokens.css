@@ -2664,14 +2664,14 @@ html[data-theme="dark"] {
 .topo-act { fill: var(--muted); }
 .topo-sec-label { fill: var(--faint); font: 11px var(--font-mono); letter-spacing: .08em; }
 .topo-edge { fill: none; stroke: var(--edge); stroke-width: 1.2; transition: opacity .15s ease; }
+.topo-edge.is-hi { stroke-width: 2; }
 .topo-edge.is-done { opacity: .4; }
 .topo-edge.is-wait { opacity: .8; }
-.topo-edge.is-error { opacity: .95; }
+.topo-edge.is-error { opacity: 1; }
 .topo-edge.is-live { opacity: .9; stroke-dasharray: 5 4; }
-.topo-edge.is-bus { stroke-width: 1.5; }
 .topo-edge.is-summary { stroke-dasharray: 2 3; opacity: .6; }
-.topo-bus { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .7; }
-.topo-bus.is-hi { stroke: var(--ink); opacity: .9; }
+.topo-bus { fill: none; stroke: var(--line-strong); stroke-width: 1; opacity: .85; }
+.topo-bus.is-hi { stroke-width: 2; opacity: 1; }
 .topo-summary .topo-node-bg { fill: color-mix(in srgb, var(--ink) 4%, var(--panel)); stroke: var(--line-strong); stroke-dasharray: 3 3; }
 .topo-summary { cursor: pointer; }
 .topo-summary:hover .topo-node-bg { stroke: var(--accent); }
@@ -2680,6 +2680,7 @@ html[data-theme="dark"] {
 @keyframes topo-flow { to { stroke-dashoffset: -9; } }
 .topo-view.is-hovering .topo-node:not(.is-hi),
 .topo-view.is-hovering .topo-edge:not(.is-hi),
+.topo-view.is-hovering .topo-bus:not(.is-hi),
 .topo-view.is-hovering .topo-sec-label { opacity: .35; }
 .topo-tools { position: absolute; z-index: 2; top: var(--sp-3); right: var(--sp-3); display: flex; gap: 6px; }
 .topo-tools .ui-btn { background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(6px); }
