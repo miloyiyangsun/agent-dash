@@ -4,14 +4,33 @@
 
 一个跑在本机的 AI Agent 只读观测台：把 Claude Code、Codex、Gemini CLI、DeepSeek 子代理等本机 agent 的会话日志，变成可以一眼看懂的实时看板。零运行时依赖，克隆下来就能跑，不需要 `npm install`，不需要配置 API key。
 
+![Agent 观测台：3D 办公室与右侧 Agent 列表](docs/screenshot-office.png)
+
 ## 四个视图
 
-| 视图 | 看什么 |
-|---|---|
-| **办公室** | 3D 等距办公室。正在工作的 agent 坐在工位上：思考时冒想法气泡，跑工具时屏幕滚动代码，需要你时站起来招手；最近完成的 agent 会下班闲逛（茶水间、沙发、书架、白板、街机、乒乓球……）。支持 2D / 3D 切换，可拖拽旋转、滚轮缩放。 |
-| **关系图** | 主控 agent 在左，派出的子代理向右逐列展开，孙代理继续向右；连线表示委派关系，运行中的链路有流动效果。一眼看清「谁在替谁干活」。 |
-| **工作台** | 三栏布局：左栏任务树（按需你 / 进行中 / 已完成分组），中栏是任务详情——事件条、对话记录、工具调用、最终答复，右栏是属性、改动文件和图片。 |
-| **时间轴** | 每个任务一条泳道，按与工作台相同的分组和筛选排列；右侧是固定宽度的时间窗，滚轮/拖拽只缩放或平移时间范围，不横向滚动。 |
+### 办公室
+
+3D 等距办公室。正在工作的 agent 坐在工位上：思考时冒想法气泡，跑工具时屏幕滚动代码，需要你时站起来招手；最近完成的 agent 会下班闲逛（茶水间、沙发、书架、白板、街机、乒乓球……）。支持 2D / 3D 切换，可拖拽旋转、滚轮缩放。右侧 Agent 侧栏按「需要你 / 出错 / 进行中 / 最近完成」分组；点办公室里的一个小人，就能看到它的最终答复、改过的文件和完整过程。
+
+![办公室：点击已完成的小人查看成果](docs/screenshot-detail.png)
+
+### 关系图
+
+主控 agent 在左，派出的子代理向右逐列展开，孙代理继续向右；连线表示委派关系，运行中的链路有流动效果。一眼看清「谁在替谁干活」。
+
+![关系图：主控与子代理的委派关系](docs/screenshot-topo.png)
+
+### 工作台
+
+三栏布局：左栏任务树（按需要你 / 进行中 / 已完成分组），中栏是任务详情——事件条、对话记录、工具调用、最终答复，右栏是属性、改动文件和图片。
+
+![工作台：选中一个任务查看完整过程](docs/screenshot-workbench.png)
+
+### 时间轴
+
+每个任务一条泳道，按与工作台相同的分组和筛选排列；右侧是固定宽度的时间窗，滚轮/拖拽只缩放或平移时间范围，不横向滚动。
+
+![时间轴：任务在时间上的分布](docs/screenshot-timeline.png)
 
 右上角的搜索框（`Ctrl K`）和状态筛选在三个列表视图之间共用；界面支持简体中文、繁體中文、English、日本語、한국어、Español、Français、Deutsch、Português。
 
@@ -65,6 +84,32 @@ Claude Code（CLI / 桌面 / IDE）、Codex、Gemini CLI、Antigravity CLI、Cop
 ## 隐私
 
 所有数据都留在本机。页面通过 Server-Sent Events 从本地服务获取状态；`--private` 可隐藏对话正文。日志格式不是公开 API，客户端升级后状态解析可能退化，欢迎提 issue。
+
+## 浅色主题
+
+界面跟随系统主题，也可以在右上角设置里固定为深色或浅色。浅色下的关系图：
+
+![浅色主题的关系图](docs/screenshot-light.png)
+
+## 开发
+
+`scripts/make-demo-data.js` 会生成一套完全虚构的 agent 日志（demo-shop / blog-engine 两个项目、若干 DeepSeek 子代理和独立会话），只写入 `--out` 指定的目录，适合截图或本地体验：
+
+```bash
+node scripts/make-demo-data.js --out /tmp/agent-dash-demo
+```
+
+再用这个目录当 home 起第二个实例（示例用 4610，避免影响正在运行的实例）：
+
+```bash
+# macOS / Linux
+HOME=/tmp/agent-dash-demo node bin/cli.js --port 4610
+
+# Windows (PowerShell)
+$env:USERPROFILE = "C:\Temp\agent-dash-demo"; node bin/cli.js --port 4610
+```
+
+演示数据里有三个「运行中」的会话；另开一个终端运行 `node scripts/make-demo-data.js --out <目录> --heartbeat` 会持续刷新它们的时间戳，让状态保持在进行中。
 
 ## 许可
 
